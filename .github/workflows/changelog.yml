@@ -1,0 +1,34 @@
+name: Changelog
+
+on:
+  pull_request:
+    branches: [main]
+    types: [closed]
+
+jobs:
+  changelog:
+    name: changelog
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+        with:
+          ref: develop
+          fetch-depth: 0
+      
+      - name: Conventional Changelog Action
+        id: conventional_changelog_action
+        uses: TriPSs/conventional-changelog-action@v3
+        with:
+          tag-prefix: 'v'
+          version-file: fly_pipe/version.json
+          
+      - name: Create Release
+        uses: actions/create-release@v1
+        if: ${{ steps.conventional_changelog_action.outputs.skipped == 'false' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.conventional_changelog_action.outputs.tag }}
+          release_name: ${{ steps.conventional_changelog_action.outputs.tag }}
+          body: ${{ steps.conventional_changelog_action.outputs.clean_changelog }}
