@@ -2,7 +2,7 @@ name: Commit Lint
 
 on:
   pull_request:
-    branches: [develop]
+    branches: [main]
     types: [opened, synchronize, edited]
 
 jobs:
