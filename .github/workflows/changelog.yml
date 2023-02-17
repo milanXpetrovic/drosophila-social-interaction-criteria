@@ -26,7 +26,7 @@ jobs:
         uses: actions/create-release@v1
         if: ${{ steps.conventional_changelog_action.outputs.skipped == 'false' }}
         env:
-          GITHUB_TOKEN: ${{ secrets.TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: ${{ steps.conventional_changelog_action.outputs.tag }}
           release_name: ${{ steps.conventional_changelog_action.outputs.tag }}
