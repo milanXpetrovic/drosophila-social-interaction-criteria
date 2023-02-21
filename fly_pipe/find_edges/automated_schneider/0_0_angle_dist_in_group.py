@@ -3,7 +3,7 @@ import json
 import pandas as pd
 
 from fly_pipe.utils import fileio
-from fly_pipe.utils import schneider_social as ss
+from fly_pipe.utils import automated_schneider as ss
 
 
 POPULATION_NAME = "CSf"
@@ -21,6 +21,6 @@ pxpermm = json.load(open(PXPERMM_PATH))
 
 for group_name, group_path in population.items():
     group = fileio.load_files_from_folder(group_path, file_format='.csv')
-    total = ss.find_distances_and_angles_in_group(
+    result = ss.find_distances_and_angles_in_group(
         group, pxpermm[group_name])
-    total.to_csv("{}/{}.csv".format(OUTPUT_PATH, group_name))
+    result.to_csv("{}/{}.csv".format(OUTPUT_PATH, group_name))

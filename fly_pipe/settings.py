@@ -1,3 +1,6 @@
+import os
+root = os.path.dirname(os.path.dirname(__file__))
+
 
 # CONFIG = '../../configs/test.yaml'
 
