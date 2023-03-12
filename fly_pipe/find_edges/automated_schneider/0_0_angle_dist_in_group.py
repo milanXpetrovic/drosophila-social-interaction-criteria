@@ -1,38 +1,73 @@
 # %%
-from mpl_toolkits.mplot3d import Axes3D
 import sys
+import json
 import itertools
 import pandas as pd
 import numpy as np
+
+import matplotlib.pyplot as plt
+from scipy.signal import find_peaks
+
 from fly_pipe.utils import fileio
-import matplotlib.pyplot as plt
-from matplotlib.image import NonUniformImage
-import matplotlib.pyplot as plt
-import numpy as np
 
-PATH = "../../../data/raw\CSf"
+
+FPS = 22.8
+POP = "CSf"
+PATH = "../../../data/raw/" + POP
+OUTPUT_PATH = "../../../data/find_edges/0_0_angle_dist_in_group/" + POP
+
+normalization = json.load(open("../../../data/normalization.json"))
+pxpermm = json.load(open("../../../data/pxpermm/" + POP + ".json"))
+
 treatment = fileio.load_multiple_folders(PATH)
-
 for group_name, group_path in treatment.items():
     print(group_name)
     group = fileio.load_files_from_folder(group_path, file_format='.csv')
 
     total = pd.DataFrame()
-    # group_dfs = {fly: pd.read_csv(path, index_col=0)
-    #              for fly, path in group.items()}
-
+    group_dfs = {fly: pd.read_csv(path, index_col=0)
+                 for fly, path in group.items()}
     combinations = list(itertools.permutations(group.keys(), 2))
-    print(len(combinations))
-    for fly1, fly2 in combinations:
-        df1 = pd.read_csv(group[fly1], index_col=0)
-        df2 = pd.read_csv(group[fly2], index_col=0)
 
+    norm = normalization[group_name]
+
+    # for fly in group.keys():
+    #     df1 = group_dfs[fly]
+
+    for fly1, fly2 in combinations:
+        df1 = group_dfs[fly1].copy(deep=True)
+        df2 = group_dfs[fly2].copy(deep=True)
         df = pd.DataFrame()
+
+        # df['movement'] = ((df1['pos x'] - df1['pos x'].shift())
+        #                   ** 2 + (df1['pos y'] - df1['pos y'].shift())**2)**0.5
+
+        # df['movement'] = df['movement']/pxpermm[group_name]/FPS
+        # df.loc[0, 'movement'] = df.loc[1, 'movement']
+
+        # n, c = np.histogram(df['movement'].values,
+        #                     bins=np.arange(0, 2.51, 0.01))
+        # opp = np.max(n) - n
+        # peaks, properties = find_peaks(opp/np.max(opp), prominence=0.05)
+
+        # if len(peaks) == 0:
+        #     movecut = 0
+
+        # else:
+        #     movecut = c[peaks[0]]
+
+        df2["pos x"] = (df2["pos x"] - norm["x"])  # / norm["radius"]
+        df2["pos y"] = (df2["pos y"] - norm["y"])  # / norm["radius"]
+        df1["pos x"] = (df1["pos x"] - norm["x"])  # / norm["radius"]
+        df1["pos y"] = (df1["pos y"] - norm["y"])  # / norm["radius"]
+
         df['distance'] = np.sqrt(
             np.square(df1['pos x']-df2['pos x']) + np.square(df1['pos y']-df2['pos y']))
 
         df['distance'] = df['distance'] / (df1.a.mean()*4)
         df['distance'] = round(df['distance'], 2)
+
+        df1.loc[df1['ori'] < 0, 'ori'] *= -1
 
         df2["pos x"] = df2["pos x"] - df1["pos x"]
         df2["pos y"] = df2["pos y"] - df1["pos y"]
@@ -43,89 +78,47 @@ for group_name, group_path in treatment.items():
         df["dfx"] = df2['pos x'] - df1['pos x']
         df["dfy"] = df2['pos y'] - df1['pos y']
 
-        df1.loc[df1['ori'] < 0, 'ori'] *= -1  # 2*np.pi
-
         cos = np.cos(df1["ori"])
         sin = np.sin(df1["ori"])
 
         df['qx2'] = df1['pos x'] + cos * df["dfx"] - sin * df["dfy"]
         df['qy2'] = df1['pos y'] + sin * df["dfx"] + cos * df["dfy"]
 
-        # df['angle'] = np.arctan2(
-        #     df["qy2"]-df1["pos y"], df["qx2"]-df1["pos x"])
         df['angle'] = np.arctan2(df["qy2"], df["qx2"])
         df['angle'] = np.rad2deg(df['angle'])
         df['angle'] = np.round(df['angle'])
 
-        df = df[df.distance <= 20]
+        df = df[df.distance <= 7]
+        # df = df[df.movement >= movecut]
+
         df = df.groupby(['angle', 'distance']
                         ).size().reset_index(name='counts')
-        # df = df[['angle', 'distance']]
 
         total = pd.concat([total, df], axis=0)
-    total.to_csv(
-        "../../../data/find_edges/0_0_angle_dist_in_group/CSf/" + group_name + ".csv")
 
-group = fileio.load_files_from_folder(
-    "../../../data/find_edges/0_0_angle_dist_in_group/CSf/", file_format='.csv')
-tot = pd.DataFrame()
+    total.to_csv("{}/{}.csv".format(OUTPUT_PATH, group_name))
+
+group = fileio.load_files_from_folder(OUTPUT_PATH, file_format='.csv')
+
+degree_bins = np.arange(0, 361, 5)
+distance_bins = np.arange(0, 6.251, 0.25)
+res = np.zeros((len(degree_bins)-1, len(distance_bins)-1))
+
 for name, path in group.items():
     df = pd.read_csv(path, index_col=0)
-    tot = pd.concat([tot, df], axis=0)
+    df.loc[df['angle'] < 0, 'angle'] += 360
 
-df = tot.groupby(['angle', 'distance'])[
-    'counts'].sum().reset_index(name='counts')
+    hist, _, _ = np.histogram2d(df['angle'], df['distance'], bins=(
+        degree_bins, distance_bins), weights=df['counts'])
 
-# define the bins
-degree_bins = np.arange(-180, 181, 5)
-distance_bins = np.arange(0, 20.001, 0.25)
+    norm_hist = np.ceil((hist / np.max(hist)) * 256)
+    res += hist
 
-# calculate the 2D histogram
-hist, _, _ = np.histogram2d(df['angle'], df['distance'], bins=(
-    degree_bins, distance_bins), weights=df['counts'])
-
-# plot the histogram as a polar heatmap
-# plt.style.use('dark_background')  # this makes the text and grid lines white
 fig, ax = plt.subplots(figsize=(10, 10), subplot_kw={'polar': True})
-ax.grid(False)  # pcolormesh gives an annoying warning when the grid is on
-ax.pcolormesh(np.radians(degree_bins), distance_bins, hist.T, cmap='jet')
+img = ax.pcolormesh(np.radians(degree_bins), distance_bins, res.T, cmap='jet')
+
+ax.set_rgrids(np.arange(0, 6.251, 0.5), angle=0)
 ax.grid(True)
+
 plt.tight_layout()
 plt.show()
-
-# %%
-degree_bins = np.arange(-180, 181, 5)
-distance_bins = np.arange(0, 6.001, 0.25)
-round_bins = pd.DataFrame(0, index=distance_bins, columns=degree_bins)
-
-for row in df.iterrows():
-    _, value = row
-    degree = value["angle"]
-    distance = value["distance"]
-    count = value["counts"]
-    degree_bin = np.digitize([degree], degree_bins)[0]-1
-    distance_bin = np.digitize([distance], distance_bins)[0]-1
-    round_bins.iloc[distance_bin, degree_bin] += count
-n = len(degree_bins)
-m = len(distance_bins)
-
-rad = np.linspace(0, 10., m)
-a = np.linspace(0, 2 * np.pi, n)
-r, th = np.meshgrid(rad, a)
-z = round_bins.to_numpy().T
-plt.figure(figsize=(10, 10))
-plt.subplot(projection="polar")
-plt.pcolormesh(th, r, z, cmap='jet')
-plt.plot(a, r, ls='none', color='k')
-plt.grid()
-plt.colorbar()
-
-
-# %%
-histogram = round(round_bins.sum(axis=1))
-histogram.plot(kind="bar")
-
-# TODO:
-# fix pxpermm and major x axis (column "a") for each individual
-# make ploting to work as function
-# make distribution to rounds bins as function
