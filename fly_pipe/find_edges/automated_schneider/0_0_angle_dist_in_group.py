@@ -39,22 +39,22 @@ for group_name, group_path in treatment.items():
         df2 = group_dfs[fly2].copy(deep=True)
         df = pd.DataFrame()
 
-        # df['movement'] = ((df1['pos x'] - df1['pos x'].shift())
-        #                   ** 2 + (df1['pos y'] - df1['pos y'].shift())**2)**0.5
+        df['movement'] = ((df1['pos x'] - df1['pos x'].shift())
+                          ** 2 + (df1['pos y'] - df1['pos y'].shift())**2)**0.5
 
-        # df['movement'] = df['movement']/pxpermm[group_name]/FPS
-        # df.loc[0, 'movement'] = df.loc[1, 'movement']
+        df['movement'] = df['movement']/pxpermm[group_name]*FPS
+        df.loc[0, 'movement'] = df.loc[1, 'movement']
 
-        # n, c = np.histogram(df['movement'].values,
-        #                     bins=np.arange(0, 2.51, 0.01))
-        # opp = np.max(n) - n
-        # peaks, properties = find_peaks(opp/np.max(opp), prominence=0.05)
+        n, c = np.histogram(df['movement'].values,
+                            bins=np.arange(0, 2.51, 0.01))
+        opp = np.max(n) - n
+        peaks, properties = find_peaks(opp/np.max(opp), prominence=0.05)
 
-        # if len(peaks) == 0:
-        #     movecut = 0
+        if len(peaks) == 0:
+            movecut = 0  # 0.01
 
-        # else:
-        #     movecut = c[peaks[0]]
+        else:
+            movecut = c[peaks[0]]
 
         df2["pos x"] = (df2["pos x"] - norm["x"])  # / norm["radius"]
         df2["pos y"] = (df2["pos y"] - norm["y"])  # / norm["radius"]
@@ -89,7 +89,7 @@ for group_name, group_path in treatment.items():
         df['angle'] = np.round(df['angle'])
 
         df = df[df.distance <= 7]
-        # df = df[df.movement >= movecut]
+        df = df[df.movement > movecut]
 
         df = df.groupby(['angle', 'distance']
                         ).size().reset_index(name='counts')
@@ -97,6 +97,7 @@ for group_name, group_path in treatment.items():
         total = pd.concat([total, df], axis=0)
 
     total.to_csv("{}/{}.csv".format(OUTPUT_PATH, group_name))
+
 
 group = fileio.load_files_from_folder(OUTPUT_PATH, file_format='.csv')
 
@@ -112,7 +113,7 @@ for name, path in group.items():
         degree_bins, distance_bins), weights=df['counts'])
 
     norm_hist = np.ceil((hist / np.max(hist)) * 256)
-    res += hist
+    res += norm_hist
 
 fig, ax = plt.subplots(figsize=(10, 10), subplot_kw={'polar': True})
 img = ax.pcolormesh(np.radians(degree_bins), distance_bins, res.T, cmap='jet')
