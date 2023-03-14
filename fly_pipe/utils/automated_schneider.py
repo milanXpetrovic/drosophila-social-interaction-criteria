@@ -42,3 +42,7 @@ def find_distances_and_angles_in_group(group, pxpermm):
         total = pd.concat([total, df], axis=0)
 
     return total
+
+
+def population_matrix():
+    pass
