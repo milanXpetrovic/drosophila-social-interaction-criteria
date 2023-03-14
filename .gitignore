@@ -1,5 +1,7 @@
 #my files
-data/*
+data/find_edges/
+data/raw/
+
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
