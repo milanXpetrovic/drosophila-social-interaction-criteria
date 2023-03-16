@@ -10,17 +10,26 @@ from scipy.signal import find_peaks
 
 from fly_pipe.utils import fileio
 
-
 FPS = 22.8
 POP = "CSf"
 PATH = "../../../data/raw/" + POP
 OUTPUT_PATH = "../../../data/find_edges/0_0_angle_dist_in_group/" + POP
-
+#%%
 # normalization = json.load(open("../../../data/normalization.json"))
 # pxpermm = json.load(open("../../../data/pxpermm/" + POP + ".json"))
 
-treatment = fileio.load_multiple_folders(PATH)
+def angledifference_nd(angle1: pd.Series, angle2: pd.Series) -> pd.Series:
+    difference = angle2 - angle1
+    adjustlow = difference < -180
+    adjusthigh = difference > 180
+    while any(adjustlow) or any(adjusthigh):
+        difference[adjustlow] = difference[adjustlow] + 360
+        difference[adjusthigh] = difference[adjusthigh] - 360
+        adjustlow = difference < -180
+        adjusthigh = difference > 180
+    return difference
 
+treatment = fileio.load_multiple_folders(PATH)
 degree_bins = np.arange(0, 361, 5)
 distance_bins = np.arange(0, 6.251, 0.25)
 
@@ -63,50 +72,71 @@ for group_name, group_path in treatment.items():
         df['distance'] = df['distance'] / (df1.a.mean()*4)
         df['distance'] = round(df['distance'], 3)
 
-        df1.loc[df1['ori'] < 0, 'ori'] *= -1
-
-        df2["pos x"] = df2["pos x"] - df1["pos x"]
-        df2["pos y"] = df2["pos y"] - df1["pos y"]
-
-        df1["pos x"] = df1["pos x"] - df1["pos x"]
-        df1["pos y"] = df1["pos y"] - df1["pos y"]
-
         df["dfx"] = df2['pos x'] - df1['pos x']
         df["dfy"] = df2['pos y'] - df1['pos y']
 
-        cos = np.cos(df1["ori"])
-        sin = np.sin(df1["ori"])
+        df['checkang'] = np.arctan2(df["dfy"], df["dfx"])
+        df['checkang'] =  df['checkang']*180/np.pi
 
-        df['qx2'] = df1['pos x'] + cos * df["dfx"] - sin * df["dfy"]
-        df['qy2'] = df1['pos y'] + sin * df["dfx"] + cos * df["dfy"]
-
-        df['angle'] = np.arctan2(df["dfy"], df["dfx"])
-        df['angle'] = np.rad2deg(df['angle'])
-        df['angle'] = np.round(df['angle'])
-
-        df["angle_diff"] = (np.rad2deg(df1["ori"])) - df["angle"]
-
-        while df["angle_diff"].min() < -180 and df["angle_diff"].max() > 180:
-            df.loc[df['angle_diff'] < -180, 'angle_diff'] += 360
-            df.loc[df['angle_diff'] > 180, 'angle_diff'] -= 360
+        df["angle"] = angledifference_nd(df["checkang"],df1["ori"]*180/np.pi)
 
         df["angle"] = np.round(df["angle_diff"])
-
+        df = df[["angle", "distance"]]
         df = df[df.distance <= 100]
         #%df = df[df.movement_df1 > (movecut_df1*pxpermm[group_name]/FPS)]
 
-        df = df.groupby(['angle', 'distance']
-                        ).size().reset_index(name='counts')
-
         total = pd.concat([total, df], axis=0)
-
-    # histogram and bins
-    # hist, _, _ = np.histogram2d(df['angle'], df['distance'], bins=(
-    #     degree_bins, distance_bins), weights=df['counts'])
 
     total.to_csv("{}/{}.csv".format(OUTPUT_PATH, group_name))
 
-# %%
+
+#%%
+group = fileio.load_files_from_folder(OUTPUT_PATH, file_format='.csv')
+
+degree_bins = np.arange(-180, 181, 5)
+distance_bins = np.arange(0, 100.051, 0.25)
+res = np.zeros((len(degree_bins)-1, len(distance_bins)-1))
+
+for name, path in group.items():
+    df = pd.read_csv(path, index_col=0)
+
+a = df.angle.values.tolist()
+
+f = open("angles.csv", "r")
+aa = f.read()
+aa = [float(x) for x in aa.split(",")]
+
+a = [round(x) for x in a]
+aa = [round(x) for x in aa]
+
+a.sort()
+aa.sort()
+
+val, not_val = 0, 0
+
+print(a==aa)
+i = 0
+for a_i, aa_i in zip(a, aa):
+    i +=1
+    if a_i == aa_i:
+        val+=1
+
+    else:
+        not_val+=1
+
+print(val, not_val)
+
+df = pd.DataFrame({"a":a, "aa":aa})
+
+#%%
+import random 
+
+start = random.randint(20, len(df)-20)
+sample = df.iloc[start:start+20]
+
+print(sample)
+#%%
+
 group = fileio.load_files_from_folder(OUTPUT_PATH, file_format='.csv')
 
 degree_bins = np.arange(-180, 181, 5)
@@ -124,16 +154,9 @@ for name, path in group.items():
     norm_hist = norm_hist.T
     # res += norm_hist
 
-sys.exit()
-
-res = np.ceil((res / np.max(res)) * 256)
-
-#%%
-
+#PLOT HEATMAP
 fig, ax = plt.subplots(figsize=(8, 8), subplot_kw={'polar': True})
-
 img = ax.pcolormesh(np.radians(degree_bins), distance_bins, res.T, cmap="jet")
-
 ax.set_rgrids(np.arange(0, 6.251, 1.0), angle=0)
 ax.grid(True)
 plt.title("MOVECUT * pxpermm[group_name] / FPS")
