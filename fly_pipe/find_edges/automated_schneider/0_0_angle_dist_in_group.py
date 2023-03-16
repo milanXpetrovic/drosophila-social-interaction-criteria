@@ -14,7 +14,7 @@ FPS = 22.8
 POP = "CSf"
 PATH = "../../../data/raw/" + POP
 OUTPUT_PATH = "../../../data/find_edges/0_0_angle_dist_in_group/" + POP
-#%%
+
 # normalization = json.load(open("../../../data/normalization.json"))
 # pxpermm = json.load(open("../../../data/pxpermm/" + POP + ".json"))
 
@@ -82,7 +82,7 @@ for group_name, group_path in treatment.items():
 
         df["angle"] = np.round(df["angle_diff"])
         df = df[["angle", "distance"]]
-        df = df[df.distance <= 100]
+        df = df[df.distance <= 10]
         #%df = df[df.movement_df1 > (movecut_df1*pxpermm[group_name]/FPS)]
 
         total = pd.concat([total, df], axis=0)
@@ -93,7 +93,7 @@ for group_name, group_path in treatment.items():
 group = fileio.load_files_from_folder(OUTPUT_PATH, file_format='.csv')
 
 degree_bins = np.arange(-177.5, 177.6, 5)
-distance_bins = np.arange(0.125, 99.8751, 0.25)
+distance_bins = np.arange(0.125, 5.8751, 0.25)
 res = np.zeros((len(degree_bins)-1, len(distance_bins)-1))
 
 for name, path in group.items():
@@ -103,12 +103,15 @@ for name, path in group.items():
         degree_bins, distance_bins), range = [[-180, 180], [0, 100.0]])
 
     norm_hist = np.ceil((hist / np.max(hist)) * 256)
-    norm_hist = norm_hist.T
-    #%res += norm_hist
+    # norm_hist = norm_hist.T
+    res += norm_hist
+
 #%%
-#PLOT HEATMAP
+degree_bins = np.linspace(-180, 180, 72)
+distance_bins = np.linspace(0, 6, 24)
+
 fig, ax = plt.subplots(figsize=(8, 8), subplot_kw={'polar': True})
-img = ax.pcolormesh(np.radians(degree_bins), distance_bins, norm_hist, cmap="jet")
+img = ax.pcolormesh(np.radians(degree_bins), distance_bins, res.T, cmap="jet")
 ax.set_rgrids(np.arange(0, 6.251, 1.0), angle=0)
 ax.grid(True)
 plt.title("")
