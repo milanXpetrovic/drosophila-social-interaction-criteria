@@ -78,7 +78,7 @@ for group_name, group_path in treatment.items():
         df['checkang'] = np.arctan2(df["dfy"], df["dfx"])
         df['checkang'] =  df['checkang']*180/np.pi
 
-        df["angle"] = angledifference_nd(df["checkang"],df1["ori"]*180/np.pi)
+        df["angle_diff"] = angledifference_nd(df["checkang"],df1["ori"]*180/np.pi)
 
         df["angle"] = np.round(df["angle_diff"])
         df = df[["angle", "distance"]]
@@ -88,6 +88,34 @@ for group_name, group_path in treatment.items():
         total = pd.concat([total, df], axis=0)
 
     total.to_csv("{}/{}.csv".format(OUTPUT_PATH, group_name))
+
+#%%
+group = fileio.load_files_from_folder(OUTPUT_PATH, file_format='.csv')
+
+degree_bins = np.arange(-177.5, 177.6, 5)
+distance_bins = np.arange(0.125, 99.8751, 0.25)
+res = np.zeros((len(degree_bins)-1, len(distance_bins)-1))
+
+for name, path in group.items():
+    df = pd.read_csv(path, index_col=0)
+
+    hist, _, _ = np.histogram2d(df['angle'], df['distance'], bins=(
+        degree_bins, distance_bins), range = [[-180, 180], [0, 100.0]])
+
+    norm_hist = np.ceil((hist / np.max(hist)) * 256)
+    norm_hist = norm_hist.T
+    #%res += norm_hist
+#%%
+#PLOT HEATMAP
+fig, ax = plt.subplots(figsize=(8, 8), subplot_kw={'polar': True})
+img = ax.pcolormesh(np.radians(degree_bins), distance_bins, norm_hist, cmap="jet")
+ax.set_rgrids(np.arange(0, 6.251, 1.0), angle=0)
+ax.grid(True)
+plt.title("")
+plt.tight_layout()
+plt.show()
+
+
 
 
 #%%
