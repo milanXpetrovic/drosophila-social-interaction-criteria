@@ -25,7 +25,7 @@ def angledifference_nd(angle1: pd.Series, angle2: pd.Series) -> pd.Series:
 
 
 FPS = 22.8
-POP = "DD-CS"
+POP = "pox-neural"
 PATH = "../../../data/raw/" + POP
 OUTPUT_PATH = "../../../data/find_edges/0_0_angle_dist_in_group/" + POP
 
@@ -98,14 +98,14 @@ group = fileio.load_files_from_folder(OUTPUT_PATH, file_format='.npy')
 res = np.sum([np.load(path) for path in group.values()], axis=0)
 
 res = res.T
-res = res[:28]
+res = res[:14]
 
 degree_bins = np.linspace(-180, 180, 71)
-distance_bins = np.linspace(0, 9, 28)
+distance_bins = np.linspace(0, 3., 14)
 
 fig, ax = plt.subplots(figsize=(8, 8), subplot_kw={'polar': True})
 img = ax.pcolormesh(np.radians(degree_bins), distance_bins, res, cmap="jet")
-ax.set_rgrids(np.arange(0, 8.251, 1.0), angle=0)
+ax.set_rgrids(np.arange(0, 3.251, 1.0), angle=0)
 ax.grid(True)
 plt.title("")
 plt.tight_layout()
