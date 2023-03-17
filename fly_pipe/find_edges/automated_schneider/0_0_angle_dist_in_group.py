@@ -23,34 +23,14 @@ def angledifference_nd(angle1: pd.Series, angle2: pd.Series) -> pd.Series:
         adjusthigh = difference > 180
     return difference
 
-
-FPS = 22.8
-POP = "pox-neural"
-PATH = "../../../data/raw/" + POP
-OUTPUT_PATH = "../../../data/find_edges/0_0_angle_dist_in_group/" + POP
-
-if not os.path.exists(OUTPUT_PATH):
-    os.makedirs(OUTPUT_PATH)
-
-normalization = json.load(open("../../../data/normalization.json"))
-pxpermm = json.load(open("../../../data/pxpermm/" + POP + ".json"))
-
-treatment = fileio.load_multiple_folders(PATH)
-
-for group_name, group_path in treatment.items():
-    print(group_name)
-    group = fileio.load_files_from_folder(group_path, file_format='.csv')
+def group_space_angle_hist(group, norm, pxpermm_group):
 
     group_dfs = {fly: pd.read_csv(path, index_col=0)
-                 for fly, path in group.items()}
+                for fly, path in group.items()}
 
     degree_bins = np.arange(-177.5, 177.6, 5)
     distance_bins = np.arange(0.125, 99.8751, 0.25)
     total = np.zeros((len(degree_bins)-1, len(distance_bins)-1))
-
-    norm = normalization[group_name]
-
-    pxpermm_group = pxpermm[group_name] / (2 * norm["radius"])
 
     for fly1, fly2 in list(itertools.permutations(group.keys(), 2)):
         df1 = group_dfs[fly1].copy(deep=True)
@@ -58,7 +38,7 @@ for group_name, group_path in treatment.items():
         df = pd.DataFrame()
 
         df['movement'] = ((df1['pos x'] - df1['pos x'].shift())
-                              ** 2 + (df1['pos y'] - df1['pos y'].shift())**2)**0.5
+                            ** 2 + (df1['pos y'] - df1['pos y'].shift())**2)**0.5
         df.loc[0, 'movement'] = df.loc[1, 'movement']
         df['movement'] = df['movement']/pxpermm_group/FPS
 
@@ -91,7 +71,32 @@ for group_name, group_path in treatment.items():
         total += hist
 
     norm_total = np.ceil((total / np.max(total)) * 256)
-    np.save("{}/{}_hist".format(OUTPUT_PATH, group_name), norm_total)
+
+    return norm_total
+
+
+FPS = 22.8
+POP = "pox-neural"
+PATH = "../../../data/raw/" + POP
+OUTPUT_PATH = "../../../data/find_edges/0_0_angle_dist_in_group/" + POP
+
+if not os.path.exists(OUTPUT_PATH):
+    os.makedirs(OUTPUT_PATH)
+
+normalization = json.load(open("../../../data/normalization.json"))
+pxpermm = json.load(open("../../../data/pxpermm/" + POP + ".json"))
+
+treatment = fileio.load_multiple_folders(PATH)
+
+for group_name, group_path in treatment.items():
+    print(group_name)
+    norm = normalization[group_name]
+    pxpermm_group = pxpermm[group_name] / (2 * norm["radius"])
+    group = fileio.load_files_from_folder(group_path, file_format='.csv')
+
+    hist = group_space_angle_hist(group, norm, pxpermm_group)
+
+    np.save("{}/{}_hist".format(OUTPUT_PATH, group_name), hist)
 
 
 group = fileio.load_files_from_folder(OUTPUT_PATH, file_format='.npy')
@@ -111,3 +116,5 @@ plt.title("")
 plt.tight_layout()
 plt.show()
 
+
+# %%
