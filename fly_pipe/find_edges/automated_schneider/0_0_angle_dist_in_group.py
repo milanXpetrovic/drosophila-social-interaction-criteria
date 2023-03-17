@@ -1,4 +1,5 @@
 # %%
+import os
 import sys
 import json
 import time
@@ -11,14 +12,6 @@ from scipy.signal import find_peaks
 
 from fly_pipe.utils import fileio
 
-FPS = 22.8
-POP = "CSf"
-PATH = "../../../data/raw/" + POP
-OUTPUT_PATH = "../../../data/find_edges/0_0_angle_dist_in_group/" + POP
-
-# normalization = json.load(open("../../../data/normalization.json"))
-# pxpermm = json.load(open("../../../data/pxpermm/" + POP + ".json"))
-
 def angledifference_nd(angle1: pd.Series, angle2: pd.Series) -> pd.Series:
     difference = angle2 - angle1
     adjustlow = difference < -180
@@ -30,11 +23,19 @@ def angledifference_nd(angle1: pd.Series, angle2: pd.Series) -> pd.Series:
         adjusthigh = difference > 180
     return difference
 
-treatment = fileio.load_multiple_folders(PATH)
-degree_bins = np.arange(0, 361, 5)
-distance_bins = np.arange(0, 6.251, 0.25)
 
-start = time.time()
+FPS = 22.8
+POP = "DD-CS"
+PATH = "../../../data/raw/" + POP
+OUTPUT_PATH = "../../../data/find_edges/0_0_angle_dist_in_group/" + POP
+
+if not os.path.exists(OUTPUT_PATH):
+    os.makedirs(OUTPUT_PATH)
+
+normalization = json.load(open("../../../data/normalization.json"))
+pxpermm = json.load(open("../../../data/pxpermm/" + POP + ".json"))
+
+treatment = fileio.load_multiple_folders(PATH)
 
 for group_name, group_path in treatment.items():
     print(group_name)
@@ -43,100 +44,68 @@ for group_name, group_path in treatment.items():
     group_dfs = {fly: pd.read_csv(path, index_col=0)
                  for fly, path in group.items()}
 
-
-    # total = pd.DataFrame()
     degree_bins = np.arange(-177.5, 177.6, 5)
-    distance_bins = np.arange(0.125, 5.8751, 0.25)
+    distance_bins = np.arange(0.125, 99.8751, 0.25)
     total = np.zeros((len(degree_bins)-1, len(distance_bins)-1))
 
-    # norm = normalization[group_name]
+    norm = normalization[group_name]
+
+    pxpermm_group = pxpermm[group_name] / (2 * norm["radius"])
+
     for fly1, fly2 in list(itertools.permutations(group.keys(), 2)):
         df1 = group_dfs[fly1].copy(deep=True)
         df2 = group_dfs[fly2].copy(deep=True)
         df = pd.DataFrame()
 
-        # df['movement_df1'] = ((df1['pos x'] - df1['pos x'].shift())
-        #                       ** 2 + (df1['pos y'] - df1['pos y'].shift())**2)**0.5
+        df['movement'] = ((df1['pos x'] - df1['pos x'].shift())
+                              ** 2 + (df1['pos y'] - df1['pos y'].shift())**2)**0.5
+        df.loc[0, 'movement'] = df.loc[1, 'movement']
+        df['movement'] = df['movement']/pxpermm_group/FPS
 
-        # df.loc[0, 'movement_df1'] = df.loc[1, 'movement_df1']
+        n, c = np.histogram(df['movement'].values,
+                            bins=np.arange(0, 2.51, 0.01))
 
-        # df['movement_df1'] = df['movement_df1']/pxpermm[group_name]/FPS
-        # n, c = np.histogram(df['movement_df1'].values,
-        #                     bins=np.arange(0, 2.51, 0.01))
-        # opp = np.max(n) - n
-        # peaks, properties = find_peaks(opp/np.max(opp), prominence=0.05)
-        # movecut_df1 = 0 if len(peaks) == 0 else c[peaks[0]]
+        peaks, _ = find_peaks((np.max(n) - n) / np.max(np.max(n) - n), prominence=0.05)
+        movecut = 0 if len(peaks) == 0 else c[peaks[0]]
 
-        # df2["pos x"] = (df2["pos x"] - norm["x"])  # / norm["radius"]
-        # df2["pos y"] = (df2["pos y"] - norm["y"])  # / norm["radius"]
-        # df1["pos x"] = (df1["pos x"] - norm["x"])  # / norm["radius"]
-        # df1["pos y"] = (df1["pos y"] - norm["y"])  # / norm["radius"]
+        df2["pos x"] = (df2["pos x"] - norm["x"] + norm["radius"])  / (2 * norm["radius"])
+        df2["pos y"] = (df2["pos y"] - norm["y"] + norm["radius"])  / (2 * norm["radius"])
+        df1["pos x"] = (df1["pos x"] - norm["x"] + norm["radius"])  / (2 * norm["radius"])
+        df1["pos y"] = (df1["pos y"] - norm["y"] + norm["radius"])  / (2 * norm["radius"])
+
+        df1["a"] = df1["a"] / (2*norm["radius"])
 
         df['distance'] = np.sqrt(
             np.square(df1['pos x']-df2['pos x']) + np.square(df1['pos y']-df2['pos y']))
+        df['distance'] = round(df['distance'] / (df1.a.mean()*4), 4)
 
-        df['distance'] = df['distance'] / (df1.a.mean()*4)
-        df['distance'] = round(df['distance'], 3)
+        df['checkang'] = np.arctan2(df2['pos y'] - df1['pos y'], df2['pos x'] - df1['pos x'])*180/np.pi
+        df["angle"] = np.round(angledifference_nd(df["checkang"],df1["ori"]*180/np.pi))
 
-        df["dfx"] = df2['pos x'] - df1['pos x']
-        df["dfy"] = df2['pos y'] - df1['pos y']
-
-        df['checkang'] = np.arctan2(df["dfy"], df["dfx"])
-        df['checkang'] =  df['checkang']*180/np.pi
-
-        df["angle_diff"] = angledifference_nd(df["checkang"],df1["ori"]*180/np.pi)
-
-        df["angle"] = np.round(df["angle_diff"])
-        df = df[["angle", "distance"]]
         df = df[df.distance <= 100]
-        #%df = df[df.movement_df1 > (movecut_df1*pxpermm[group_name]/FPS)]
+        df = df[df.movement > (movecut*pxpermm_group/FPS)]
 
         hist, _, _ = np.histogram2d(df['angle'], df['distance'], bins=(
         degree_bins, distance_bins), range = [[-180, 180], [0, 100.0]])
 
         total += hist
-        # total = pd.concat([total, df], axis=0)
 
     norm_total = np.ceil((total / np.max(total)) * 256)
-
     np.save("{}/{}_hist".format(OUTPUT_PATH, group_name), norm_total)
 
-    # total.to_csv("{}/{}.csv".format(OUTPUT_PATH, group_name))
 
-    print(time.time()-start)
-
-print(time.time()-start)
-
-#%%
 group = fileio.load_files_from_folder(OUTPUT_PATH, file_format='.npy')
+res = np.sum([np.load(path) for path in group.values()], axis=0)
 
-degree_bins = np.arange(-177.5, 177.6, 5)
-distance_bins = np.arange(0.125, 99.8751, 0.25)
-res = np.zeros((len(degree_bins)-1, len(distance_bins)-1))
+res = res.T
+res = res[:28]
 
-for name, path in group.items():
-    # df = pd.read_csv(path, index_col=0)
-
-    # hist, _, _ = np.histogram2d(df['angle'], df['distance'], bins=(
-    #     degree_bins, distance_bins), range = [[-180, 180], [0, 100.0]])
-
-    norm_hist = np.load(path)
-
-    res += norm_hist
-#%%
-res=res.T
-#%%
-np.save('CSf_good_hist.npy', res)
-#%%
-res = np.load('CSf_good_hist.npy')
-#%%
-
-degree_bins = np.linspace(-180, 180, 72)
-distance_bins = np.linspace(0, 6, 24)
+degree_bins = np.linspace(-180, 180, 71)
+distance_bins = np.linspace(0, 9, 28)
 
 fig, ax = plt.subplots(figsize=(8, 8), subplot_kw={'polar': True})
-img = ax.pcolormesh(np.radians(degree_bins), distance_bins, res.T, cmap="jet")
-ax.set_rgrids(np.arange(0, 6.251, 1.0), angle=0)
+img = ax.pcolormesh(np.radians(degree_bins), distance_bins, res, cmap="jet")
+ax.set_rgrids(np.arange(0, 8.251, 1.0), angle=0)
 ax.grid(True)
 plt.title("")
 plt.tight_layout()
