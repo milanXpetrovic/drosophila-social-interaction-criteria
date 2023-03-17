@@ -1,6 +1,7 @@
 # %%
 import sys
 import json
+import time
 import itertools
 import pandas as pd
 import numpy as np
@@ -33,18 +34,23 @@ treatment = fileio.load_multiple_folders(PATH)
 degree_bins = np.arange(0, 361, 5)
 distance_bins = np.arange(0, 6.251, 0.25)
 
+start = time.time()
+
 for group_name, group_path in treatment.items():
     print(group_name)
     group = fileio.load_files_from_folder(group_path, file_format='.csv')
 
-    total = pd.DataFrame()
     group_dfs = {fly: pd.read_csv(path, index_col=0)
                  for fly, path in group.items()}
-    combinations = list(itertools.permutations(group.keys(), 2))
+
+
+    # total = pd.DataFrame()
+    degree_bins = np.arange(-177.5, 177.6, 5)
+    distance_bins = np.arange(0.125, 5.8751, 0.25)
+    total = np.zeros((len(degree_bins)-1, len(distance_bins)-1))
 
     # norm = normalization[group_name]
-
-    for fly1, fly2 in combinations:
+    for fly1, fly2 in list(itertools.permutations(group.keys(), 2)):
         df1 = group_dfs[fly1].copy(deep=True)
         df2 = group_dfs[fly2].copy(deep=True)
         df = pd.DataFrame()
@@ -82,31 +88,49 @@ for group_name, group_path in treatment.items():
 
         df["angle"] = np.round(df["angle_diff"])
         df = df[["angle", "distance"]]
-        df = df[df.distance <= 10]
+        df = df[df.distance <= 100]
         #%df = df[df.movement_df1 > (movecut_df1*pxpermm[group_name]/FPS)]
 
-        total = pd.concat([total, df], axis=0)
+        hist, _, _ = np.histogram2d(df['angle'], df['distance'], bins=(
+        degree_bins, distance_bins), range = [[-180, 180], [0, 100.0]])
 
-    total.to_csv("{}/{}.csv".format(OUTPUT_PATH, group_name))
+        total += hist
+        # total = pd.concat([total, df], axis=0)
+
+    norm_total = np.ceil((total / np.max(total)) * 256)
+
+    np.save("{}/{}_hist".format(OUTPUT_PATH, group_name), norm_total)
+
+    # total.to_csv("{}/{}.csv".format(OUTPUT_PATH, group_name))
+
+    print(time.time()-start)
+
+print(time.time()-start)
 
 #%%
-group = fileio.load_files_from_folder(OUTPUT_PATH, file_format='.csv')
+group = fileio.load_files_from_folder(OUTPUT_PATH, file_format='.npy')
 
 degree_bins = np.arange(-177.5, 177.6, 5)
-distance_bins = np.arange(0.125, 5.8751, 0.25)
+distance_bins = np.arange(0.125, 99.8751, 0.25)
 res = np.zeros((len(degree_bins)-1, len(distance_bins)-1))
 
 for name, path in group.items():
-    df = pd.read_csv(path, index_col=0)
+    # df = pd.read_csv(path, index_col=0)
 
-    hist, _, _ = np.histogram2d(df['angle'], df['distance'], bins=(
-        degree_bins, distance_bins), range = [[-180, 180], [0, 100.0]])
+    # hist, _, _ = np.histogram2d(df['angle'], df['distance'], bins=(
+    #     degree_bins, distance_bins), range = [[-180, 180], [0, 100.0]])
 
-    norm_hist = np.ceil((hist / np.max(hist)) * 256)
-    # norm_hist = norm_hist.T
+    norm_hist = np.load(path)
+
     res += norm_hist
-
 #%%
+res=res.T
+#%%
+np.save('CSf_good_hist.npy', res)
+#%%
+res = np.load('CSf_good_hist.npy')
+#%%
+
 degree_bins = np.linspace(-180, 180, 72)
 distance_bins = np.linspace(0, 6, 24)
 
