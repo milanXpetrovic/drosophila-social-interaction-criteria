@@ -15,7 +15,7 @@ from scipy.signal import find_peaks
 from fly_pipe.utils import fileio
 
 
-def random_pick_grouptreatment(treatment: Dict[str, str], group_size: int) -> Dict[str, str]:
+def pick_random_group(treatment: Dict[str, str], group_size: int) -> Dict[str, str]:
     """
     Randomly picks a group of flies from each treatment.
 
@@ -35,7 +35,7 @@ def random_pick_grouptreatment(treatment: Dict[str, str], group_size: int) -> Di
 
     picked_groups = random.sample(range(n + 1), m)
     picked_groups.sort()
-    picked_flies = [random.choice(range(m)) for _ in range(m-1)]
+    picked_flies = [random.choice(range(m)) for _ in range(m)]
 
     random_pick = {}
     for group_i, fly_i in zip(picked_groups, picked_flies):
@@ -47,7 +47,7 @@ def random_pick_grouptreatment(treatment: Dict[str, str], group_size: int) -> Di
         fly_name = fly_name.replace(".csv", "")
         fly_path = list(group.values())[fly_i]
 
-        random_pick.update({"{}-{}".format(group_name, fly_name): fly_path})
+        random_pick.update({"{}".format(group_name): fly_path})
 
     return random_pick
 
@@ -149,6 +149,75 @@ def group_space_angle_hist(group: Dict[str, str], norm: Dict[str, float], pxperm
     return norm_total
 
 
+def random_group_space_angle_hist(normalized_dfs, pxpermm):
+
+    degree_bins = np.arange(-177.5, 177.6, 5)
+    distance_bins = np.arange(0.125, 99.8751, 0.25)
+    total = np.zeros((len(degree_bins)-1, len(distance_bins)-1))
+
+    for fly1_key, fly2_key in list(itertools.permutations(normalized_dfs.keys(), 2)):
+        df1 = normalized_dfs[fly1_key].copy(deep=True)
+        df2 = normalized_dfs[fly2_key].copy(deep=True)
+        df = pd.DataFrame()
+
+        df['movement'] = ((df1['pos x'] - df1['pos x'].shift())
+                          ** 2 + (df1['pos y'] - df1['pos y'].shift())**2)**0.5
+        df.loc[0, 'movement'] = df.loc[1, 'movement']
+
+        df['movement'] = df['movement']/pxpermm[fly1_key]/FPS
+
+        n, c = np.histogram(df['movement'].values,
+                            bins=np.arange(0, 2.51, 0.01))
+
+        peaks, _ = find_peaks(
+            (np.max(n) - n) / np.max(np.max(n) - n), prominence=0.05)
+        movecut = 0 if len(peaks) == 0 else c[peaks[0]]
+
+        df['distance'] = np.sqrt(
+            np.square(df1['pos x']-df2['pos x']) + np.square(df1['pos y']-df2['pos y']))
+        df['distance'] = round(df['distance'] / (df1.a.mean()*4), 4)
+
+        df['checkang'] = np.arctan2(
+            df2['pos y'] - df1['pos y'], df2['pos x'] - df1['pos x'])*180/np.pi
+        df["angle"] = np.round(angledifference_nd(
+            df["checkang"], df1["ori"]*180/np.pi))
+
+        df = df[df.distance <= 100]
+        df = df[df.movement > (movecut*pxpermm[fly1_key]/FPS)]
+
+        hist, _, _ = np.histogram2d(df['angle'], df['distance'], bins=(
+            degree_bins, distance_bins), range=[[-180, 180], [0, 100.0]])
+
+        total += hist
+
+    norm_total = np.ceil((total / np.max(total)) * 256)
+
+    return norm_total
+
+
+def normalize_random_group(random_group, normalization, pxpermm):
+
+    normalized_dfs = {}
+    pxpermm_dict = {}
+    for group, fly_path in random_group.items():
+        norm = normalization[group]
+        pxpermm_group = pxpermm[group] / (2 * norm["radius"])
+
+        df = pd.read_csv(fly_path, index_col=0)
+
+        df["pos x"] = (df["pos x"] - norm["x"] +
+                       norm["radius"]) / (2 * norm["radius"])
+        df["pos y"] = (df["pos y"] - norm["y"] +
+                       norm["radius"]) / (2 * norm["radius"])
+
+        df["a"] = df["a"] / (2*norm["radius"])
+
+        normalized_dfs.update({group: df})
+        pxpermm_dict.update({group: pxpermm_group})
+
+    return (normalized_dfs, pxpermm)
+
+
 def plot_heatmap(histogram):
     """
     NEed to fix this foo. 
@@ -156,11 +225,11 @@ def plot_heatmap(histogram):
     """
 
     degree_bins = np.linspace(-180, 180, 71)
-    distance_bins = np.linspace(0, MAX_DIST, 14)
+    distance_bins = np.linspace(0, 6, 24)
     fig, ax = plt.subplots(figsize=(8, 8), subplot_kw={'polar': True})
     img = ax.pcolormesh(np.radians(degree_bins),
                         distance_bins, histogram, cmap="jet")
-    ax.set_rgrids(np.arange(0, 3.251, 1.0), angle=0)
+    ax.set_rgrids(np.arange(0, 6.251, 1.0), angle=0)
     ax.grid(True)
     plt.title("")
     plt.tight_layout()
@@ -168,7 +237,7 @@ def plot_heatmap(histogram):
 
 
 FPS = 22.8
-POP = "pox-neural"
+POP = "CSf"
 INPUT_PATH = "../../../data/raw/" + POP
 OUTPUT_PATH = "../../../data/find_edges/0_0_angle_dist_in_group/" + POP
 
@@ -180,12 +249,12 @@ pxpermm = json.load(open("../../../data/pxpermm/" + POP + ".json"))
 
 treatment = fileio.load_multiple_folders(INPUT_PATH)
 
+# %%
 for group_name, group_path in treatment.items():
     print(group_name)
     norm = normalization[group_name]
     pxpermm_group = pxpermm[group_name] / (2 * norm["radius"])
     group = fileio.load_files_from_folder(group_path, file_format='.csv')
-
     hist = group_space_angle_hist(group, norm, pxpermm_group)
 
     np.save("{}/{}".format(OUTPUT_PATH, group_name), hist)
@@ -196,5 +265,16 @@ res = np.sum([np.load(path) for path in group.values()], axis=0)
 
 # %%
 
+all_hists = []
+for i in range(100):
+    random_group = pick_random_group(treatment, group_size=12)
+    normalized_dfs, pxpermm = normalize_random_group(
+        random_group, normalization, pxpermm)
+    hist = random_group_space_angle_hist(normalized_dfs, pxpermm)
+    all_hists.append(hist)
 
 # %%
+res = np.sum(all_hists, axis=0)
+res = res.T
+res = res[:24]
+plot_heatmap(res)
