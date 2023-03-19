@@ -1,3 +1,16 @@
+# [0.1.0](https://github.com/milanXpetrovic/fly-pipe/compare/v0.0.2...v0.1.0) (2023-03-19)
+
+
+### Features
+
+* null dataset generation and angle-distance histogram ([e364c65](https://github.com/milanXpetrovic/fly-pipe/commit/e364c652b6dc20c5903968869762f721d50df2a4))
+* replaced pandas groupby with numpy histogram ([7bbcff7](https://github.com/milanXpetrovic/fly-pipe/commit/7bbcff769907f187f65aabca7d82f23309f7e5cc))
+* replaced pandas with numpy for faster performance ([b040928](https://github.com/milanXpetrovic/fly-pipe/commit/b040928b20989123d3a7eb9a9d974cbb24b3acbb))
+* spatial normalization added ([1ba80ea](https://github.com/milanXpetrovic/fly-pipe/commit/1ba80ea92971e00b808b563c02a494c6ca7f209c))
+* spatial normalization added ([b24ad5d](https://github.com/milanXpetrovic/fly-pipe/commit/b24ad5dc8f81da9c97b6fe1029cb0934fd44aa55))
+
+
+
 ## [0.0.2](https://github.com/milanXpetrovic/fly-pipe/compare/v0.0.1...v0.0.2) (2023-03-14)
 
 
