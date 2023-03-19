@@ -292,12 +292,14 @@ def test_np_hist(normalized_dfs: dict[str, pd.DataFrame], pxpermm: dict[str, flo
             df2_array[:, 1] - df1_array[:, 1], df2_array[:, 0] - df1_array[:, 0])
         checkang = checkang * 180 / np.pi
 
-        angle = angledifference_nd(checkang, df1_array[:, 2])
+        angle = angledifference_nd(checkang, df1_array[:, 2]*180/np.pi)
         angle = np.round(angle)
+
+        df = pd.DataFrame(
+            {'angle': angle, 'distance': distance, 'movement': movement})
 
         mask = (distance <= 100) & (movement > (
             movecut * pxpermm[fly1_key] / FPS))
-
         angle = angle[mask]
         distance = distance[mask]
 
