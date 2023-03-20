@@ -1,4 +1,9 @@
 # %%
+from multiprocessing import Process
+import multiprocessing as mp
+import multiprocessing
+from multiprocessing import Pool
+
 from typing import Dict, Tuple
 import random
 import os
@@ -156,6 +161,60 @@ def group_space_angle_hist(group: Dict[str, str], norm: Dict[str, float], pxperm
     return norm_total
 
 
+def test_np_hist(normalized_dfs: dict[str, pd.DataFrame], pxpermm: dict[str, float]) -> np.ndarray:
+
+    degree_bins = np.arange(-177.5, 177.6, 5)
+    distance_bins = np.arange(0.125, 99.8751, 0.25)
+    total = np.zeros((len(degree_bins)-1, len(distance_bins)-1))
+
+    for fly1_key, fly2_key in list(itertools.permutations(normalized_dfs.keys(), 2)):
+        df1 = normalized_dfs[fly1_key].copy(deep=True)
+        df2 = normalized_dfs[fly2_key].copy(deep=True)
+
+        df1_array = df1.to_numpy()
+        df2_array = df2.to_numpy()
+
+        movement = np.sqrt((df1_array[:, 0] - np.roll(df1_array[:, 0], 1))**2
+                           + (df1_array[:, 1] - np.roll(df1_array[:, 1], 1))**2)
+        movement[0] = movement[1]
+        movement = movement / pxpermm[fly1_key] / 22.8
+
+        n, c = np.histogram(movement, bins=np.arange(0, 2.51, 0.01))
+
+        peaks, _ = find_peaks(
+            (np.max(n) - n) / np.max(np.max(n) - n), prominence=0.05)
+        movecut = 0 if len(peaks) == 0 else c[peaks[0]]
+
+        a = np.mean(df1_array[:, 3])
+        distance = np.sqrt((df1_array[:, 0] - df2_array[:, 0])**2
+                           + (df1_array[:, 1] - df2_array[:, 1])**2)
+        distance = np.round(distance / (a * 4), 4)
+
+        checkang = np.arctan2(
+            df2_array[:, 1] - df1_array[:, 1], df2_array[:, 0] - df1_array[:, 0])
+        checkang = checkang * 180 / np.pi
+
+        angle = angledifference_nd(checkang, df1_array[:, 2]*180/np.pi)
+        angle = np.round(angle)
+
+        df = pd.DataFrame(
+            {'angle': angle, 'distance': distance, 'movement': movement})
+
+        mask = (distance <= 100) & (movement > (
+            movecut * pxpermm[fly1_key] / 22.8))
+        angle = angle[mask]
+        distance = distance[mask]
+
+        hist, _, _ = np.histogram2d(angle, distance, bins=(
+            degree_bins, distance_bins), range=[[-180, 180], [0, 100.0]])
+
+        total += hist
+
+    norm_total = np.ceil((total / np.max(total)) * 256)
+
+    return norm_total
+
+
 def random_group_space_angle_hist(normalized_dfs: dict[str, pd.DataFrame], pxpermm: dict[str, float]) -> np.ndarray:
     """Calculate and return a 2D histogram of the angular and distance differences between pairs of flies based on their positions, using normalized dataframes.
 
@@ -229,120 +288,74 @@ def plot_heatmap(histogram):
     plt.show()
 
 
-FPS = 22.8
-POP = "CSf"
-INPUT_PATH = "../../../data/raw/" + POP
-OUTPUT_PATH = "../../../data/find_edges/0_0_angle_dist_in_group/" + POP
+def one_run(tuple_args):
+    treatment, normalization, pxpermm = tuple_args
+    # global treatment, normalization
 
-if not os.path.exists(OUTPUT_PATH):
-    os.makedirs(OUTPUT_PATH)
-
-normalization = json.load(open("../../../data/normalization.json"))
-pxpermm = json.load(open("../../../data/pxpermm/" + POP + ".json"))
-
-treatment = fileio.load_multiple_folders(INPUT_PATH)
-
-# %%
-for group_name, group_path in treatment.items():
-    print(group_name)
-    norm = normalization[group_name]
-    pxpermm_group = pxpermm[group_name] / (2 * norm["radius"])
-    group = fileio.load_files_from_folder(group_path, file_format='.csv')
-    hist = group_space_angle_hist(group, norm, pxpermm_group)
-
-    np.save("{}/{}".format(OUTPUT_PATH, group_name), hist)
-
-# %%
-group = fileio.load_files_from_folder(OUTPUT_PATH, file_format='.npy')
-res = np.sum([np.load(path) for path in group.values()], axis=0)
-
-# %%
-
-
-def test_np_hist(normalized_dfs: dict[str, pd.DataFrame], pxpermm: dict[str, float]) -> np.ndarray:
-
-    degree_bins = np.arange(-177.5, 177.6, 5)
-    distance_bins = np.arange(0.125, 99.8751, 0.25)
-    total = np.zeros((len(degree_bins)-1, len(distance_bins)-1))
-
-    for fly1_key, fly2_key in list(itertools.permutations(normalized_dfs.keys(), 2)):
-        df1 = normalized_dfs[fly1_key].copy(deep=True)
-        df2 = normalized_dfs[fly2_key].copy(deep=True)
-
-        df1_array = df1.to_numpy()
-        df2_array = df2.to_numpy()
-
-        movement = np.sqrt((df1_array[:, 0] - np.roll(df1_array[:, 0], 1))**2
-                           + (df1_array[:, 1] - np.roll(df1_array[:, 1], 1))**2)
-        movement[0] = movement[1]
-        movement = movement / pxpermm[fly1_key] / FPS
-
-        n, c = np.histogram(movement, bins=np.arange(0, 2.51, 0.01))
-
-        peaks, _ = find_peaks(
-            (np.max(n) - n) / np.max(np.max(n) - n), prominence=0.05)
-        movecut = 0 if len(peaks) == 0 else c[peaks[0]]
-
-        a = np.mean(df1_array[:, 3])
-        distance = np.sqrt((df1_array[:, 0] - df2_array[:, 0])**2
-                           + (df1_array[:, 1] - df2_array[:, 1])**2)
-        distance = np.round(distance / (a * 4), 4)
-
-        checkang = np.arctan2(
-            df2_array[:, 1] - df1_array[:, 1], df2_array[:, 0] - df1_array[:, 0])
-        checkang = checkang * 180 / np.pi
-
-        angle = angledifference_nd(checkang, df1_array[:, 2]*180/np.pi)
-        angle = np.round(angle)
-
-        df = pd.DataFrame(
-            {'angle': angle, 'distance': distance, 'movement': movement})
-
-        mask = (distance <= 100) & (movement > (
-            movecut * pxpermm[fly1_key] / FPS))
-        angle = angle[mask]
-        distance = distance[mask]
-
-        hist, _, _ = np.histogram2d(angle, distance, bins=(
-            degree_bins, distance_bins), range=[[-180, 180], [0, 100.0]])
-
-        total += hist
-
-    norm_total = np.ceil((total / np.max(total)) * 256)
-
-    return norm_total
-
-
-all_hists = []
-for i in range(1):
-    t1 = time.time()
     random_group = pick_random_group(treatment, group_size=12)
-    t2 = time.time()
-    print(f"Time taken for pick_random_group: {t2-t1:.2f} seconds")
-
-    t1 = time.time()
     normalized_dfs, pxpermm = normalize_random_group(
         random_group, normalization, pxpermm)
-    t2 = time.time()
-    print(f"Time taken for normalize_random_group: {t2-t1:.2f} seconds")
-
-    t1 = time.time()
-    hist_df = random_group_space_angle_hist(normalized_dfs, pxpermm)
-    t2 = time.time()
-    print(f"Time taken for random_group_space_angle_hist: {t2-t1:.2f} seconds")
-
-    t1 = time.time()
     hist_np = test_np_hist(normalized_dfs, pxpermm)
+    return hist_np
+
+
+if __name__ == '__main__':
+
+    FPS = 22.8
+    POP = "CSf"
+    INPUT_PATH = "../../../data/raw/" + POP
+    OUTPUT_PATH = "../../../data/find_edges/0_0_angle_dist_in_group/" + POP
+
+    if not os.path.exists(OUTPUT_PATH):
+        os.makedirs(OUTPUT_PATH)
+
+    normalization = json.load(open("../../../data/normalization.json"))
+    pxpermm = json.load(open("../../../data/pxpermm/" + POP + ".json"))
+
+    treatment = fileio.load_multiple_folders(INPUT_PATH)
+
+    t1 = time.time()
+
+    with multiprocessing.Pool() as pool:
+        res = pool.map(
+            one_run, [(treatment, normalization, pxpermm) for _ in range(500)])
+
     t2 = time.time()
-    print(f"Time taken for test_np_hist: {t2-t1:.2f} seconds")
 
-    all_hists.append(hist)
+    print(f"Time taken for PARALELIZED: {t2-t1:.2f} seconds")
+    print(f"Time taken for PARALELIZED: {(t2-t1)/60:.2f} minutes")
 
+    res = np.sum(res, axis=0)
+    res = res.T
+    res = res[:24]
+
+    t1 = time.time()
+    args_tuple = treatment, normalization, pxpermm
+    for i in range(500):
+        one_run(args_tuple)
+    t2 = time.time()
+    print(f"Time taken for FOR_LOOP: {t2-t1:.2f} seconds")
+    print(f"Time taken for FOR_LOOP: {(t2-t1)/60:.2f} minutes")
+    plot_heatmap(res)
+
+
+# # %%
+# # Real data part
+# for group_name, group_path in treatment.items():
+#     print(group_name)
+#     norm = normalization[group_name]
+#     pxpermm_group = pxpermm[group_name] / (2 * norm["radius"])
+#     group = fileio.load_files_from_folder(group_path, file_format='.csv')
+#     hist = group_space_angle_hist(group, norm, pxpermm_group)
+
+#     np.save("{}/{}".format(OUTPUT_PATH, group_name), hist)
+
+# group = fileio.load_files_from_folder(OUTPUT_PATH, file_format='.npy')
+# res = np.sum([np.load(path) for path in group.values()], axis=0)
+
+
+# res = np.sum(all_hists, axis=0)
+# res = res.T
+# res = res[:24]
+# plot_heatmap(res)
 # %%
-
-
-# %%
-res = np.sum(all_hists, axis=0)
-res = res.T
-res = res[:24]
-plot_heatmap(res)
