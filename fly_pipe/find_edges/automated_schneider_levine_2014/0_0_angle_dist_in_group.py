@@ -1,30 +1,30 @@
 # %%
-from multiprocessing import Process
-import multiprocessing as mp
-import multiprocessing
-from multiprocessing import Pool
-
-from typing import Dict, Tuple
-import random
 import os
 import sys
-import json
 import time
+import json
+import random
 import itertools
+import multiprocessing
+
 import pandas as pd
 import numpy as np
-
 import matplotlib.pyplot as plt
 from scipy.signal import find_peaks
 
+from typing import Dict, Tuple
+
 from fly_pipe.utils import fileio
+from fly_pipe import settings
+
+# %%
 
 
-def pick_random_group(treatment: Dict[str, str], group_size: int) -> Dict[str, str]:
+def pick_random_group(treatment: Dict[str, str]) -> Dict[str, str]:
     """Randomly picks a group of flies from each treatment."""
 
     n = len(treatment)-1
-    m = group_size
+    m = settings.RANDOM_GROUP_SIZE
 
     picked_groups = random.sample(range(n + 1), m)
     picked_groups.sort()
@@ -89,82 +89,18 @@ def normalize_random_group(random_group: Dict[str, str],
     return (normalized_dfs, pxpermm)
 
 
-def group_space_angle_hist(group: Dict[str, str], norm: Dict[str, float], pxpermm_group: float) -> np.ndarray:
-    """
-    Generate a 2D histogram of the angular and spatial distribution of flies within the group.
+def random_group_space_angle_hist(normalized_dfs: dict[str, pd.DataFrame], pxpermm: dict[str, float]) -> np.ndarray:
+    """Calculate and return a 2D histogram of the angular and distance differences between pairs of flies based on their positions, using normalized dataframes.
 
     Args:
-        group (Dict[str, str]): A dictionary mapping fly names to their corresponding file paths.
-        norm (Dict[str, float]): A dictionary containing the x and y coordinates of the center of the arena, and the 
-                                 radius of the arena, in pixels. Used for normalization of data.
-        pxpermm_group (float): Pixel to millimeter conversion factor for the group.
+    normalized_dfs (Dict[str, pd.DataFrame]): A dictionary containing the normalized dataframes of the flies.
+    pxpermm (Dict[str, float]): A dictionary containing the conversion factor from pixels to millimeters for each fly.
 
     Returns:
-        np.ndarray: A 2D histogram of the angular and spatial distribution of flies within the group.
-                    The values are normalized to 256.
+    A numpy array representing the normalized 2D histogram of the angular and distance differences between pairs of flies.
     """
-
-    group_dfs = {fly: pd.read_csv(path, index_col=0)
-                 for fly, path in group.items()}
-
-    degree_bins = np.arange(-177.5, 177.6, 5)
-    distance_bins = np.arange(0.125, 99.8751, 0.25)
-    total = np.zeros((len(degree_bins)-1, len(distance_bins)-1))
-
-    for fly1, fly2 in list(itertools.permutations(group.keys(), 2)):
-        df1 = group_dfs[fly1].copy(deep=True)
-        df2 = group_dfs[fly2].copy(deep=True)
-        df = pd.DataFrame()
-
-        df['movement'] = ((df1['pos x'] - df1['pos x'].shift())
-                          ** 2 + (df1['pos y'] - df1['pos y'].shift())**2)**0.5
-        df.loc[0, 'movement'] = df.loc[1, 'movement']
-        df['movement'] = df['movement']/pxpermm_group/FPS
-
-        n, c = np.histogram(df['movement'].values,
-                            bins=np.arange(0, 2.51, 0.01))
-
-        peaks, _ = find_peaks(
-            (np.max(n) - n) / np.max(np.max(n) - n), prominence=0.05)
-        movecut = 0 if len(peaks) == 0 else c[peaks[0]]
-
-        df2["pos x"] = (df2["pos x"] - norm["x"] +
-                        norm["radius"]) / (2 * norm["radius"])
-        df2["pos y"] = (df2["pos y"] - norm["y"] +
-                        norm["radius"]) / (2 * norm["radius"])
-        df1["pos x"] = (df1["pos x"] - norm["x"] +
-                        norm["radius"]) / (2 * norm["radius"])
-        df1["pos y"] = (df1["pos y"] - norm["y"] +
-                        norm["radius"]) / (2 * norm["radius"])
-
-        df1["a"] = df1["a"] / (2*norm["radius"])
-
-        df['distance'] = np.sqrt(
-            np.square(df1['pos x']-df2['pos x']) + np.square(df1['pos y']-df2['pos y']))
-        df['distance'] = round(df['distance'] / (df1.a.mean()*4), 4)
-
-        df['checkang'] = np.arctan2(
-            df2['pos y'] - df1['pos y'], df2['pos x'] - df1['pos x'])*180/np.pi
-        df["angle"] = np.round(angledifference_nd(
-            df["checkang"], df1["ori"]*180/np.pi))
-
-        df = df[df.distance <= 100]
-        df = df[df.movement > (movecut*pxpermm_group/FPS)]
-
-        hist, _, _ = np.histogram2d(df['angle'], df['distance'], bins=(
-            degree_bins, distance_bins), range=[[-180, 180], [0, 100.0]])
-
-        total += hist
-
-    norm_total = np.ceil((total / np.max(total)) * 256)
-
-    return norm_total
-
-
-def test_np_hist(normalized_dfs: dict[str, pd.DataFrame], pxpermm: dict[str, float]) -> np.ndarray:
-
-    degree_bins = np.arange(-177.5, 177.6, 5)
-    distance_bins = np.arange(0.125, 99.8751, 0.25)
+    degree_bins = np.arange(-177.5, 177.6, settings.DEGREE_BIN_SIZE)
+    distance_bins = np.arange(0.125, 99.8751, settings.DISTANCE_BIN_SIZE)
     total = np.zeros((len(degree_bins)-1, len(distance_bins)-1))
 
     for fly1_key, fly2_key in list(itertools.permutations(normalized_dfs.keys(), 2)):
@@ -173,17 +109,6 @@ def test_np_hist(normalized_dfs: dict[str, pd.DataFrame], pxpermm: dict[str, flo
 
         df1_array = df1.to_numpy()
         df2_array = df2.to_numpy()
-
-        movement = np.sqrt((df1_array[:, 0] - np.roll(df1_array[:, 0], 1))**2
-                           + (df1_array[:, 1] - np.roll(df1_array[:, 1], 1))**2)
-        movement[0] = movement[1]
-        movement = movement / pxpermm[fly1_key] / 22.8
-
-        n, c = np.histogram(movement, bins=np.arange(0, 2.51, 0.01))
-
-        peaks, _ = find_peaks(
-            (np.max(n) - n) / np.max(np.max(n) - n), prominence=0.05)
-        movecut = 0 if len(peaks) == 0 else c[peaks[0]]
 
         a = np.mean(df1_array[:, 3])
         distance = np.sqrt((df1_array[:, 0] - df2_array[:, 0])**2
@@ -197,70 +122,28 @@ def test_np_hist(normalized_dfs: dict[str, pd.DataFrame], pxpermm: dict[str, flo
         angle = angledifference_nd(checkang, df1_array[:, 2]*180/np.pi)
         angle = np.round(angle)
 
-        df = pd.DataFrame(
-            {'angle': angle, 'distance': distance, 'movement': movement})
+        if settings.MOVECUT:
+            movement = np.sqrt((df1_array[:, 0] - np.roll(df1_array[:, 0], 1))**2
+                               + (df1_array[:, 1] - np.roll(df1_array[:, 1], 1))**2)
+            movement[0] = movement[1]
+            movement = movement / pxpermm[fly1_key] / settings.FPS
 
-        mask = (distance <= 100) & (movement > (
-            movecut * pxpermm[fly1_key] / 22.8))
+            n, c = np.histogram(movement, bins=np.arange(0, 2.51, 0.01))
+
+            peaks, _ = find_peaks(
+                (np.max(n) - n) / np.max(np.max(n) - n), prominence=0.05)
+            movecut = 0 if len(peaks) == 0 else c[peaks[0]]
+
+            mask = (distance <= settings.DISTANCE_MAX) & (movement > (
+                movecut * pxpermm[fly1_key] / settings.FPS))
+
+        else:
+            mask = (distance <= settings.DISTANCE_MAX)
+
         angle = angle[mask]
         distance = distance[mask]
 
         hist, _, _ = np.histogram2d(angle, distance, bins=(
-            degree_bins, distance_bins), range=[[-180, 180], [0, 100.0]])
-
-        total += hist
-
-    norm_total = np.ceil((total / np.max(total)) * 256)
-
-    return norm_total
-
-
-def random_group_space_angle_hist(normalized_dfs: dict[str, pd.DataFrame], pxpermm: dict[str, float]) -> np.ndarray:
-    """Calculate and return a 2D histogram of the angular and distance differences between pairs of flies based on their positions, using normalized dataframes.
-
-    Args:
-    normalized_dfs (Dict[str, pd.DataFrame]): A dictionary containing the normalized dataframes of the flies.
-    pxpermm (Dict[str, float]): A dictionary containing the conversion factor from pixels to millimeters for each fly.
-
-    Returns:
-    A numpy array representing the normalized 2D histogram of the angular and distance differences between pairs of flies.
-    """
-
-    degree_bins = np.arange(-177.5, 177.6, 5)
-    distance_bins = np.arange(0.125, 99.8751, 0.25)
-    total = np.zeros((len(degree_bins)-1, len(distance_bins)-1))
-
-    for fly1_key, fly2_key in list(itertools.permutations(normalized_dfs.keys(), 2)):
-        df1 = normalized_dfs[fly1_key].copy(deep=True)
-        df2 = normalized_dfs[fly2_key].copy(deep=True)
-        df = pd.DataFrame()
-
-        df['movement'] = ((df1['pos x'] - df1['pos x'].shift())
-                          ** 2 + (df1['pos y'] - df1['pos y'].shift())**2)**0.5
-        df.loc[0, 'movement'] = df.loc[1, 'movement']
-
-        df['movement'] = df['movement']/pxpermm[fly1_key]/FPS
-
-        n, c = np.histogram(df['movement'].values,
-                            bins=np.arange(0, 2.51, 0.01))
-
-        peaks, _ = find_peaks(
-            (np.max(n) - n) / np.max(np.max(n) - n), prominence=0.05)
-        movecut = 0 if len(peaks) == 0 else c[peaks[0]]
-
-        df['distance'] = np.sqrt(
-            np.square(df1['pos x']-df2['pos x']) + np.square(df1['pos y']-df2['pos y']))
-        df['distance'] = round(df['distance'] / (df1.a.mean()*4), 4)
-
-        df['checkang'] = np.arctan2(
-            df2['pos y'] - df1['pos y'], df2['pos x'] - df1['pos x'])*180/np.pi
-        df["angle"] = np.round(angledifference_nd(
-            df["checkang"], df1["ori"]*180/np.pi))
-
-        df = df[df.distance <= 100]
-        df = df[df.movement > (movecut*pxpermm[fly1_key]/FPS)]
-
-        hist, _, _ = np.histogram2d(df['angle'], df['distance'], bins=(
             degree_bins, distance_bins), range=[[-180, 180], [0, 100.0]])
 
         total += hist
@@ -295,22 +178,25 @@ def one_run(tuple_args):
     random_group = pick_random_group(treatment, group_size=12)
     normalized_dfs, pxpermm = normalize_random_group(
         random_group, normalization, pxpermm)
-    hist_np = test_np_hist(normalized_dfs, pxpermm)
+    hist_np = random_group_space_angle_hist(normalized_dfs, pxpermm)
     return hist_np
 
+# %%
+
+
+# %%
 
 if __name__ == '__main__':
 
-    FPS = 22.8
-    POP = "CSf"
-    INPUT_PATH = "../../../data/raw/" + POP
-    OUTPUT_PATH = "../../../data/find_edges/0_0_angle_dist_in_group/" + POP
+    INPUT_PATH = os.path.join(settings.RAW_DATA, settings.TREATMENT)
+    OUTPUT_PATH = os.path.join(
+        "../../../data/find_edges/0_0_angle_dist_in_group/", settings.TREATMENT)
 
     if not os.path.exists(OUTPUT_PATH):
         os.makedirs(OUTPUT_PATH)
 
-    normalization = json.load(open("../../../data/normalization.json"))
-    pxpermm = json.load(open("../../../data/pxpermm/" + POP + ".json"))
+    normalization = json.load(open(settings.NROMALIZATION))
+    pxpermm = json.load(open(settings.PXPERMM))
 
     treatment = fileio.load_multiple_folders(INPUT_PATH)
 
