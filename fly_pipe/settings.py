@@ -1,14 +1,29 @@
 import os
-root = os.path.dirname(os.path.dirname(__file__))
+# root = os.path.dirname(os.path.dirname(__file__))
+TREATMENT = "CSf"
+
+RAW_DATA = r"F:\fly-pipe\data\raw"
 
 
-# CONFIG = '../../configs/test.yaml'
+os.path.join()
+PXPERMM = "../../../data/pxpermm/" + TREATMENT + ".json"
 
-# with open(CONFIG) as f:
-#     config = yaml.safe_load(f)
 
-# EXPERIMENT_DURATION = config['EXPERIMENT_DURATION'] #experiment duration time must be in seconds
-# FPS = config['FPS']
-# DATAFRAME_LEN = EXPERIMENT_DURATION * FPS
+NROMALIZATION = r"F:\fly-pipe\data\normalization.json"
 
-# RAW_DATA = config['RAW_DATA']
+
+FPS = 22.8
+
+RANDOM_GROUP_SIZE = 12
+
+DEGREE_BIN_SIZE = 5
+DISTANCE_BIN_SIZE = 0.25
+
+DISTANCE_MAX = 100
+
+MOVECUT = 1
+
+N_RANDOM_PASSES = 500
+
+START = 0
+END = 30
