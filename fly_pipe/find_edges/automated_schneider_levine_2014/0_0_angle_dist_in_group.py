@@ -17,8 +17,6 @@ from typing import Dict, Tuple
 from fly_pipe.utils import fileio
 from fly_pipe import settings
 
-# %%
-
 
 def pick_random_group(treatment: Dict[str, str]) -> Dict[str, str]:
     """Randomly picks a group of flies from each treatment."""
@@ -40,7 +38,7 @@ def pick_random_group(treatment: Dict[str, str]) -> Dict[str, str]:
         fly_name = fly_name.replace(".csv", "")
         fly_path = list(group.values())[fly_i]
 
-        random_pick.update({"{}".format(group_name): fly_path})
+        random_pick.update({group_name: fly_path})
 
     return random_pick
 
@@ -89,7 +87,33 @@ def normalize_random_group(random_group: Dict[str, str],
     return (normalized_dfs, pxpermm)
 
 
-def random_group_space_angle_hist(normalized_dfs: dict[str, pd.DataFrame], pxpermm: dict[str, float]) -> np.ndarray:
+def normalize_group(group: Dict[str, str],
+                    group_name: str,
+                    normalization: Dict[str, Dict[str, float]],
+                    pxpermm: Dict[str, float]) -> Tuple[Dict[str, pd.DataFrame], Dict[str, float]]:
+
+    normalized_dfs = {}
+    pxpermm_dict = {}
+    for fly_name, fly_path in group.items():
+        norm = normalization[group_name]
+        pxpermm_group = pxpermm[group_name] / (2 * norm["radius"])
+
+        df = pd.read_csv(fly_path, index_col=0)
+
+        df["pos x"] = (df["pos x"] - norm["x"] +
+                       norm["radius"]) / (2 * norm["radius"])
+        df["pos y"] = (df["pos y"] - norm["y"] +
+                       norm["radius"]) / (2 * norm["radius"])
+
+        df["a"] = df["a"] / (2*norm["radius"])
+
+        normalized_dfs.update({fly_name: df})
+        pxpermm_dict.update({fly_name: pxpermm_group})
+
+    return (normalized_dfs, pxpermm_dict)
+
+
+def group_space_angle_hist(normalized_dfs: dict[str, pd.DataFrame], pxpermm: dict[str, float]) -> np.ndarray:
     """Calculate and return a 2D histogram of the angular and distance differences between pairs of flies based on their positions, using normalized dataframes.
 
     Args:
@@ -171,20 +195,16 @@ def plot_heatmap(histogram):
     plt.show()
 
 
-def one_run(tuple_args):
+def one_run_random(tuple_args):
     treatment, normalization, pxpermm = tuple_args
     # global treatment, normalization
 
     random_group = pick_random_group(treatment, group_size=12)
-    normalized_dfs, pxpermm = normalize_random_group(
+    normalized_dfs, pxpermm = normalize_group(
         random_group, normalization, pxpermm)
-    hist_np = random_group_space_angle_hist(normalized_dfs, pxpermm)
+    hist_np = group_space_angle_hist(normalized_dfs, pxpermm)
     return hist_np
 
-# %%
-
-
-# %%
 
 if __name__ == '__main__':
 
@@ -192,14 +212,40 @@ if __name__ == '__main__':
     OUTPUT_PATH = os.path.join(
         "../../../data/find_edges/0_0_angle_dist_in_group/", settings.TREATMENT)
 
-    if not os.path.exists(OUTPUT_PATH):
-        os.makedirs(OUTPUT_PATH)
+    # if not os.path.exists(OUTPUT_PATH)
+    os.makedirs(OUTPUT_PATH, exist_ok=True)
 
     normalization = json.load(open(settings.NROMALIZATION))
     pxpermm = json.load(open(settings.PXPERMM))
-
     treatment = fileio.load_multiple_folders(INPUT_PATH)
 
+    t1 = time.time()
+    all_hists = []
+    for group_name, group_path in treatment.items():
+        print(group_name)
+
+        group = fileio.load_files_from_folder(group_path, file_format='.csv')
+        normalized_dfs, pxpermm_group = normalize_group(
+            group, group_name, normalization, pxpermm)
+
+        hist = group_space_angle_hist(normalized_dfs, pxpermm_group)
+        all_hists.append(hist)
+    t2 = time.time()
+    print(f"Time taken for FOR_LOOP: {t2-t1:.2f} seconds")
+    print(f"Time taken for FOR_LOOP: {(t2-t1)/60:.2f} minutes")
+
+    res = np.sum(all_hists, axis=0)
+    res = res.T
+    res = res[:24]
+    plot_heatmap(res)
+
+    sys.exit()
+
+    # np.save("{}/{}".format(OUTPUT_PATH, group_name), hist)
+
+
+# %%
+    # random part
     t1 = time.time()
 
     with multiprocessing.Pool() as pool:
