@@ -88,15 +88,21 @@ def normalize_random_group(random_group: Dict[str, str],
 
 
 def normalize_group(group: Dict[str, str],
-                    group_name: str,
                     normalization: Dict[str, Dict[str, float]],
-                    pxpermm: Dict[str, float]) -> Tuple[Dict[str, pd.DataFrame], Dict[str, float]]:
+                    pxpermm: Dict[str, float],
+                    group_name: str = "random") -> Tuple[Dict[str, pd.DataFrame], Dict[str, float]]:
 
     normalized_dfs = {}
     pxpermm_dict = {}
+
     for fly_name, fly_path in group.items():
-        norm = normalization[group_name]
-        pxpermm_group = pxpermm[group_name] / (2 * norm["radius"])
+        if group_name == "random":
+            norm = normalization[fly_name]
+            pxpermm_group = pxpermm[fly_name] / (2 * norm["radius"])
+
+        else:
+            norm = normalization[group_name]
+            pxpermm_group = pxpermm[group_name] / (2 * norm["radius"])
 
         df = pd.read_csv(fly_path, index_col=0)
 
@@ -197,9 +203,8 @@ def plot_heatmap(histogram):
 
 def one_run_random(tuple_args):
     treatment, normalization, pxpermm = tuple_args
-    # global treatment, normalization
 
-    random_group = pick_random_group(treatment, group_size=12)
+    random_group = pick_random_group(treatment)
     normalized_dfs, pxpermm = normalize_group(
         random_group, normalization, pxpermm)
     hist_np = group_space_angle_hist(normalized_dfs, pxpermm)
@@ -219,56 +224,29 @@ if __name__ == '__main__':
     pxpermm = json.load(open(settings.PXPERMM))
     treatment = fileio.load_multiple_folders(INPUT_PATH)
 
-    t1 = time.time()
-    all_hists = []
-    for group_name, group_path in treatment.items():
-        print(group_name)
+    # all_hists = []
+    # for group_name, group_path in treatment.items():
+    #     print(group_name)
 
-        group = fileio.load_files_from_folder(group_path, file_format='.csv')
-        normalized_dfs, pxpermm_group = normalize_group(
-            group, group_name, normalization, pxpermm)
+    #     group = fileio.load_files_from_folder(group_path, file_format='.csv')
+    #     normalized_dfs, pxpermm_group = normalize_group(
+    #         group, normalization, pxpermm, group_name)
 
-        hist = group_space_angle_hist(normalized_dfs, pxpermm_group)
-        all_hists.append(hist)
-    t2 = time.time()
-    print(f"Time taken for FOR_LOOP: {t2-t1:.2f} seconds")
-    print(f"Time taken for FOR_LOOP: {(t2-t1)/60:.2f} minutes")
+    #     hist = group_space_angle_hist(normalized_dfs, pxpermm_group)
+    #     all_hists.append(hist)
 
-    res = np.sum(all_hists, axis=0)
-    res = res.T
-    res = res[:24]
-    plot_heatmap(res)
+    # res = np.sum(all_hists, axis=0)
+    # res = res.T
 
-    sys.exit()
+    # np.save("{}/{}".format(OUTPUT_PATH, "real"), hist)
 
-    # np.save("{}/{}".format(OUTPUT_PATH, group_name), hist)
-
-
-# %%
-    # random part
-    t1 = time.time()
-
-    with multiprocessing.Pool() as pool:
+    with multiprocessing.Pool(processes=6) as pool:
         res = pool.map(
-            one_run, [(treatment, normalization, pxpermm) for _ in range(500)])
-
-    t2 = time.time()
-
-    print(f"Time taken for PARALELIZED: {t2-t1:.2f} seconds")
-    print(f"Time taken for PARALELIZED: {(t2-t1)/60:.2f} minutes")
+            one_run_random, [(treatment, normalization, pxpermm) for _ in range(500)])
 
     res = np.sum(res, axis=0)
     res = res.T
-    res = res[:24]
-
-    t1 = time.time()
-    args_tuple = treatment, normalization, pxpermm
-    for i in range(500):
-        one_run(args_tuple)
-    t2 = time.time()
-    print(f"Time taken for FOR_LOOP: {t2-t1:.2f} seconds")
-    print(f"Time taken for FOR_LOOP: {(t2-t1)/60:.2f} minutes")
-    plot_heatmap(res)
+    np.save("{}/{}".format(OUTPUT_PATH, "null"), res)
 
 
 # # %%
