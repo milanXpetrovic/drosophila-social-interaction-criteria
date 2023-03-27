@@ -1,11 +1,15 @@
 import os
 # root = os.path.dirname(os.path.dirname(__file__))
 TREATMENT = "CSf"
+# TREATMENT_NAME =
+
 
 RAW_DATA = r"F:\fly-pipe\data\raw"
 
 
-os.path.join()
+# TREATMENT_PATH
+
+# os.path.join()
 PXPERMM = "../../../data/pxpermm/" + TREATMENT + ".json"
 
 
