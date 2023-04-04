@@ -1,5 +1,6 @@
 # %%
 import os
+import sys
 import time
 import json
 import multiprocessing
@@ -13,6 +14,7 @@ from fly_pipe import settings
 from fly_pipe.utils import fileio
 import fly_pipe.utils.automated_schneider_levine as SL
 
+#%%
 
 def one_run_random(tuple_args):
     treatment, normalization, pxpermm = tuple_args
@@ -23,21 +25,11 @@ def one_run_random(tuple_args):
     hist_np = SL.group_space_angle_hist(normalized_dfs, pxpermm)
     return hist_np
 
-
-def fast_flag_interactions():
-    pass
-
-
-def get_times():
-    pass
-
-# %%
-
-
+#%%
 if __name__ == '__main__':
 
     OUTPUT_PATH = os.path.join(
-        "../../../data/find_edges/0_0_angle_dist_in_group/", settings.TREATMENT)
+        "../../data/find_edges/0_0_angle_dist_in_group/", settings.TREATMENT)
 
     os.makedirs(OUTPUT_PATH, exist_ok=True)
 
@@ -45,41 +37,48 @@ if __name__ == '__main__':
     pxpermm = json.load(open(settings.PXPERMM))
     treatment = fileio.load_multiple_folders(settings.TRACKINGS)
 
-    all_hists = []
-    for group_name, group_path in treatment.items():
-        print(group_name)
+    # all_hists = []
+    # for group_name, group_path in treatment.items():
+    #     print(group_name)
 
-        group = fileio.load_files_from_folder(group_path, file_format='.csv')
-        normalized_dfs, pxpermm_group = SL.normalize_group(
-            group, normalization, pxpermm, group_name)
+    #     group = fileio.load_files_from_folder(group_path, file_format='.csv')
+    #     normalized_dfs, pxpermm_group = SL.normalize_group(
+    #         group, normalization, pxpermm, group_name)
 
-        hist = SL.group_space_angle_hist(normalized_dfs, pxpermm_group)
-        all_hists.append(hist)
+    #     hist = SL.group_space_angle_hist(normalized_dfs, pxpermm_group)
+    #     all_hists.append(hist)
 
-    res = np.sum(all_hists, axis=0)
-    res = res.T
+    # res = np.sum(all_hists, axis=0)
+    # res = res.T
 
-    np.save("{}/{}".format(OUTPUT_PATH, "real"), hist)
+    # np.save("{}/{}".format(OUTPUT_PATH, "real"), hist)
 
-    with multiprocessing.Pool(processes=6) as pool:
-        res = pool.map(
-            one_run_random, [(treatment, normalization, pxpermm) for _ in range(500)])
+    # with multiprocessing.Pool() as pool:
+    #     res = pool.map(
+    #         one_run_random, [(treatment, normalization, pxpermm) for _ in range(500)])
 
-    res = np.sum(res, axis=0)
-    res = res.T
-    np.save("{}/{}".format(OUTPUT_PATH, "null"), res)
+    # res = np.sum(res, axis=0)
+    # res = res.T
+    # np.save("{}/{}".format(OUTPUT_PATH, "null"), res)
 
 # %%
+ni = 0
+
+angle = np.zeros((500, 1))
+distance = np.zeros((500, 1))
+time = np.zeros((500, 1))
+
+treatment = fileio.load_multiple_folders(settings.TRACKINGS)
+temp_ind =  random.sample(range(len(treatment)), settings.RANDOM_GROUP_SIZE)
+temp_ind.sort()
 
 while np.any(~np.any([angle, distance, time], axis=1)):
 
-    real = np.load(
-        "/home/milky/fly-pipe/data/find_edges/0_0_angle_dist_in_group/CSf/real.npy")
-    null = np.load(
-        "/home/milky/fly-pipe/data/find_edges/0_0_angle_dist_in_group/CSf/null.npy")
-
-    superN = real[:, :80, ]
-    pseudo_N = null[:, :80]
+    superN = np.load(
+        "/home/mile/fly-pipe/data/find_edges/0_0_angle_dist_in_group/CSf/real.npy")
+    
+    pseudo_N = SL.boot_pseudo_fly_space(treatment, temp_ind)
+    
 
     sum_superN = np.sum(superN)
     sum_pseudo_N = np.sum(pseudo_N)
@@ -125,8 +124,8 @@ while np.any(~np.any([angle, distance, time], axis=1)):
 
     # define the maximum distance
     C = {}
-    C[0] = np.arange(0, 20+0.25, 0.25)
-    C[1] = np.arange(-180, 181, 5)
+    C[0] = np.arange(0, settings.DISTANCE_MAX, settings.DISTANCE_BIN_SIZE)
+    C[1] = np.arange(-180, 181, settings.DEGREE_BIN_SIZE)
 
     percentile_value = np.percentile(N2[N2 > 0], 75)
     N2[N2 < percentile_value] = 0
@@ -161,8 +160,6 @@ while np.any(~np.any([angle, distance, time], axis=1)):
     nrand1 = 500
     distance_bin = 5
 
-    angle = []
-    distance = []
     # assuming tempangle, tempdistance, superN, pseudo_N, nrand1, and storeN are already defined as per previous code
     if tempangle.size != 0 and tempdistance is not None:
         storeN = storeN + (superN/np.sum(superN) -
@@ -202,19 +199,90 @@ while np.any(~np.any([angle, distance, time], axis=1)):
             else:
                 keepitgoing = 0
 
-        angle.append(tempangle)
-        distance.append(tempdistance)
+        angle[ni] = tempangle
+        distance[ni] = tempdistance
 
-        # ? Times
-        # tempangle se prosljeduje get_times() funkciji
+        sys.exit()
 
-        # temps = s[temp_ind] # indexex of random picked flies
-        # tstrain = [None]*temps.shape[0]
 
-        def get_tstrain(ii):
-            return get_times(temps[ii].name, tempangle, tempdistance, start, exptime, nflies, np.nan, movecut)
+#%%
+import json
+import random
+from fly_pipe import settings
+from fly_pipe.utils import fileio
+import sys
+import fly_pipe.utils.automated_schneider_levine as SL
+import pandas as pd
+import numpy as np
+import itertools
+treatment = fileio.load_multiple_folders(settings.TRACKINGS)
 
-        with concurrent.futures.ProcessPoolExecutor() as executor:
-            results = executor.map(get_tstrain, range(temps.shape[0]))
+temp_ind =  random.sample(range(len(treatment)), settings.RANDOM_GROUP_SIZE)
+temp_ind.sort()
 
-        tstrain = list(results)
+pick_random_groups = {list(treatment.keys())[i]: list(treatment.values())[i] for i in temp_ind}
+normalized_dfs, pxpermm_dict = SL.normalize_random_group(pick_random_groups)
+minang=25
+tempdistance=0.5
+bl = tempdistance
+#%%
+# for fly1_key, fly2_key in list(itertools.permutations(normalized_dfs.keys(), 2)):
+nflies = len(normalized_dfs)
+m = len(list(normalized_dfs.values())[0])
+#%%
+distances = np.zeros((nflies, nflies, m))
+angles = np.zeros((nflies, nflies, m))
+#%%
+for i in range(nflies):
+    for ii in range(nflies):
+        fly1_key = list(normalized_dfs.keys())[i]
+        fly2_key = list(normalized_dfs.keys())[ii] 
+
+        df1 = normalized_dfs[fly1_key].copy(deep=True)
+        df2 = normalized_dfs[fly2_key].copy(deep=True)
+
+        df1_array = df1.to_numpy()
+        df2_array = df2.to_numpy()
+
+        # df1_array = df1.to_numpy()
+        mindinst = np.mean(df1_array[:, 3]) # 'a' column of fly df
+        mindist = 4 * bl * mindinst
+
+        distance = np.sqrt((df1_array[:, 0] - df2_array[:, 0])**2
+                                + (df1_array[:, 1] - df2_array[:, 1])**2)
+        distances[i, ii, :] = np.round(distance) #/ (a * 4), 4
+
+        checkang = np.arctan2(
+            df2_array[:, 1] - df1_array[:, 1], df2_array[:, 0] - df1_array[:, 0])
+        checkang = checkang * 180 / np.pi
+
+        angle = SL.angledifference_nd(checkang, df1_array[:, 2]*180/np.pi)
+        angles[i, ii, :] = np.round(angle)
+        
+#%%
+ints = np.double(np.abs(angles) < minang) + np.double(distance < np.tile(mindist, (1, nflies, m)))
+ints[ints < 2] = 0
+ints[ints > 1] = 1
+
+for i in range(nflies):
+    for ii in range(nflies):
+        if i == ii:
+           ints[i, ii, :]= 0 ##np.zeros(len(angle))
+
+#%%
+print(ints[:,:,1111])
+#%%
+
+
+ints = np.double(np.abs(angles) < minang) + np.double(distance < np.tile(mindist, (m-start)))
+ints[ints < 2] = 0
+ints[ints > 1] = 1
+
+
+
+    r = np.nonzero(ints)
+    print(len(r[0]))
+    # v = ints[r, c] 
+
+    sys.exit()
+
