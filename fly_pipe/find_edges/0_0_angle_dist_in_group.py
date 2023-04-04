@@ -224,65 +224,89 @@ pick_random_groups = {list(treatment.keys())[i]: list(treatment.values())[i] for
 normalized_dfs, pxpermm_dict = SL.normalize_random_group(pick_random_groups)
 minang=25
 tempdistance=0.5
-bl = tempdistance
-#%%
-# for fly1_key, fly2_key in list(itertools.permutations(normalized_dfs.keys(), 2)):
-nflies = len(normalized_dfs)
-m = len(list(normalized_dfs.values())[0])
-#%%
-distances = np.zeros((nflies, nflies, m))
-angles = np.zeros((nflies, nflies, m))
-#%%
-for i in range(nflies):
-    for ii in range(nflies):
-        fly1_key = list(normalized_dfs.keys())[i]
-        fly2_key = list(normalized_dfs.keys())[ii] 
-
-        df1 = normalized_dfs[fly1_key].copy(deep=True)
-        df2 = normalized_dfs[fly2_key].copy(deep=True)
-
-        df1_array = df1.to_numpy()
-        df2_array = df2.to_numpy()
-
-        # df1_array = df1.to_numpy()
-        mindinst = np.mean(df1_array[:, 3]) # 'a' column of fly df
-        mindist = 4 * bl * mindinst
-
-        distance = np.sqrt((df1_array[:, 0] - df2_array[:, 0])**2
-                                + (df1_array[:, 1] - df2_array[:, 1])**2)
-        distances[i, ii, :] = np.round(distance) #/ (a * 4), 4
-
-        checkang = np.arctan2(
-            df2_array[:, 1] - df1_array[:, 1], df2_array[:, 0] - df1_array[:, 0])
-        checkang = checkang * 180 / np.pi
-
-        angle = SL.angledifference_nd(checkang, df1_array[:, 2]*180/np.pi)
-        angles[i, ii, :] = np.round(angle)
-        
-#%%
-ints = np.double(np.abs(angles) < minang) + np.double(distance < np.tile(mindist, (1, nflies, m)))
-ints[ints < 2] = 0
-ints[ints > 1] = 1
-
-for i in range(nflies):
-    for ii in range(nflies):
-        if i == ii:
-           ints[i, ii, :]= 0 ##np.zeros(len(angle))
-
-#%%
-print(ints[:,:,1111])
-#%%
+timecut = 0
+movecut = 0
 
 
-ints = np.double(np.abs(angles) < minang) + np.double(distance < np.tile(mindist, (m-start)))
-ints[ints < 2] = 0
-ints[ints > 1] = 1
+def fast_flag_interactions(normalized_dfs,timecut,minang,bl,start,exptime,nflies,fps,movecut):
+    bl = tempdistance
 
+    nflies = len(normalized_dfs)
+    m = len(list(normalized_dfs.values())[0])
 
+    distances = np.zeros((nflies, nflies, m))
+    angles = np.zeros((nflies, nflies, m))
 
-    r = np.nonzero(ints)
-    print(len(r[0]))
-    # v = ints[r, c] 
+    for i in range(nflies):
+        for ii in range(nflies):
+            fly1_key = list(normalized_dfs.keys())[i]
+            fly2_key = list(normalized_dfs.keys())[ii] 
 
-    sys.exit()
+            df1 = normalized_dfs[fly1_key].copy(deep=True)
+            df2 = normalized_dfs[fly2_key].copy(deep=True)
+
+            df1_array = df1.to_numpy()
+            df2_array = df2.to_numpy()
+
+            mindinst = np.mean(df1_array[:, 3]) # 'a' column of fly df
+            mindist = 4 * bl * mindinst
+
+            distance = np.sqrt((df1_array[:, 0] - df2_array[:, 0])**2
+                                    + (df1_array[:, 1] - df2_array[:, 1])**2)
+            distances[i, ii, :] = np.round(distance) #/ (a * 4), 4
+
+            checkang = np.arctan2(
+                df2_array[:, 1] - df1_array[:, 1], df2_array[:, 0] - df1_array[:, 0])
+            checkang = checkang * 180 / np.pi
+
+            angle = SL.angledifference_nd(checkang, df1_array[:, 2]*180/np.pi)
+            angles[i, ii, :] = np.round(angle)
+            
+    ints = np.double(np.abs(angles) < minang) + np.double(distance < np.tile(mindist, (1, nflies, m)))
+    ints[ints < 2] = 0
+    ints[ints > 1] = 1
+
+    for i in range(nflies):
+        for ii in range(nflies):
+            if i == ii:
+                ints[i, ii, :]= 0 ##np.zeros(len(angle))
+
+    r, c, v = np.nonzero(ints)
+    int_times = np.zeros((nflies*m, 1))
+    int_ind = 0
+
+    for i in range(nflies):
+        for ii in np.setxor1d(np.arange(nflies), i):
+            temp = np.intersect1d(np.where(r == i), np.where(c == ii))
+
+            if temp.size != 0:
+                potential_ints = np.concatenate(([np.inf], np.diff(v[temp]), [np.inf]))
+                nints = np.where(potential_ints > 1)[0]
+                durations = np.zeros((len(nints) - 1, 1))
+
+                for ni in range(0, len(nints) - 1):
+                    durations[ni] = np.sum(np.arange(nints[ni] + 1, nints[ni + 1] - 1).size) + 1
+
+                    if np.sum(np.arange(nints[ni], nints[ni + 1] - 1).size) < timecut:
+                        potential_ints[nints[ni]:nints[ni + 1] - 1] = np.nan
+
+                    else:
+                        int_times[int_ind] = np.sum(np.arange(nints[ni], nints[ni + 1] - 1).size)
+                        int_ind+=1
+
+                        if movecut:
+                            #int_times[int_ind] = int_times[int_ind] - np.sum(too_slow[r[temp[nints[ni]:nints[ni + 1] - 1]], v[temp[nints[ni]:nints[ni + 1] - 1]] : v[temp[nints[ni] : nints[ni + 1] - 1]]) 
+                            pass
+
+                # ints[i, ii, v[temp[np.isnan(potential_ints)]]] = 0
+                # ints[i, ii, v[temp[potential_ints[:-1] > 1]]] = np.inf
+
+                inds_nan = np.where(np.isnan(potential_ints))[0]
+                ints[i, ii, v[temp[inds_nan]]] = 0
+                inds_inf = np.where(potential_ints[:-1] > 1)[0]
+                ints[i, ii, v[temp[inds_inf]]] = np.inf
+
+    int_times = int_times[:int_ind-1] / settings.FPS
+
+    return int_times
 
