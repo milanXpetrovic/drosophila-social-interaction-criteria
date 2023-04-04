@@ -1,4 +1,6 @@
 
+import sys
+import json
 import random
 import itertools
 
@@ -14,28 +16,24 @@ from scipy.signal import find_peaks
 from typing import Dict, Tuple
 
 
-def pick_random_group(treatment: Dict[str, str]) -> Dict[str, str]:
-    """Randomly picks a group of flies from each treatment."""
+def random_pick_groups(treatment: Dict[str, str]) -> Dict[str, str]:
+    """Randomly picks n groups from treatment."""
+    
+    if len(treatment) < settings.RANDOM_GROUP_SIZE:
+        sys.exit(f"Not enough groups in treatment!\nTrying to pick {settings.RANDOM_GROUP_SIZE} from {len(treatment)} treatments")
 
-    n = len(treatment)-1
-    m = settings.RANDOM_GROUP_SIZE
-
-    picked_groups = random.sample(range(n + 1), m)
+    picked_groups =  random.sample(range(len(treatment)), settings.RANDOM_GROUP_SIZE)
     picked_groups.sort()
-    picked_flies = [random.choice(range(m)) for _ in range(m)]
 
     random_pick = {}
-    for group_i, fly_i in zip(picked_groups, picked_flies):
-        group_name = list(treatment.keys())[group_i]
-        group_path = list(treatment.values())[group_i]
+    for group_i in picked_groups:
+        group_name, group_path = list(treatment.items())[group_i]
 
-        group = fileio.load_files_from_folder(group_path, file_format='.csv')
-        fly_name = list(group.keys())[fly_i]
-        fly_name = fly_name.replace(".csv", "")
-        fly_path = list(group.values())[fly_i]
+        # group = fileio.load_files_from_folder(group_path, file_format='.csv')
+        # fly_path = random.choice(list(group.keys()))
 
-        random_pick.update({group_name: fly_path})
-
+        random_pick.update({group_name: group_path})
+    
     return random_pick
 
 
@@ -54,33 +52,37 @@ def angledifference_nd(angle1, angle2):
     return difference
 
 
-def normalize_random_group(random_group: Dict[str, str],
-                           normalization: Dict[str, Dict[str, float]],
-                           pxpermm: Dict[str, float]) -> Tuple[Dict[str, pd.DataFrame], Dict[str, float]]:
+def normalize_random_group(pick_random_groups):
     """
-    Normalize the data in each CSV file in `random_group` using the normalization values in `normalization` 
-    and `pxpermm`.
+    #TODO: write docstring
     """
+    normalization = json.load(open(settings.NROMALIZATION))
+    pxpermm = json.load(open(settings.PXPERMM))
 
     normalized_dfs = {}
     pxpermm_dict = {}
-    for group, fly_path in random_group.items():
-        norm = normalization[group]
-        pxpermm_group = pxpermm[group] / (2 * norm["radius"])
 
+    #TODO: fix this number 12 in for loop, dynamicaly determine by number of flies
+    for group_name in random.sample(list(pick_random_groups.keys()), 12): 
+        norm = normalization[group_name]
+        group_path = pick_random_groups[group_name]
+        group_files = fileio.load_files_from_folder(group_path, file_format='.csv')
+        
+        fly_path = random.choice(list(group_files.values()))
         df = pd.read_csv(fly_path, index_col=0)
 
         df["pos x"] = (df["pos x"] - norm["x"] +
-                       norm["radius"]) / (2 * norm["radius"])
+                        norm["radius"]) / (2 * norm["radius"])
         df["pos y"] = (df["pos y"] - norm["y"] +
-                       norm["radius"]) / (2 * norm["radius"])
-
+                        norm["radius"]) / (2 * norm["radius"])
         df["a"] = df["a"] / (2*norm["radius"])
 
-        normalized_dfs.update({group: df})
-        pxpermm_dict.update({group: pxpermm_group})
+        normalized_dfs.update({group_name: df})
+        
+        pxpermm_group = pxpermm[group_name] / (2 * norm["radius"])
+        pxpermm_dict.update({group_name: pxpermm_group})
 
-    return (normalized_dfs, pxpermm)
+    return normalized_dfs, pxpermm_dict
 
 
 def normalize_group(group: Dict[str, str],
@@ -177,6 +179,25 @@ def group_space_angle_hist(normalized_dfs: Dict[str, pd.DataFrame], pxpermm: Dic
     norm_total = np.ceil((total / np.max(total)) * 256)
 
     return norm_total
+
+
+def boot_pseudo_fly_space(treatment, temp_ind):
+    """
+    #TODO: bro, just write docstring!
+    """
+    pick_random_groups = {list(treatment.keys())[i]: list(treatment.values())[i] for i in temp_ind}
+
+    superN = []
+    # TODO: add multiprocessing here!
+    for _ in range(len(pick_random_groups)):
+        normalized_dfs, pxpermm_dict = normalize_random_group(pick_random_groups)
+        N = group_space_angle_hist(normalized_dfs, pxpermm_dict)
+        superN.append(N)
+
+    N = np.sum(superN, axis=0)
+
+    return N
+
 
 
 def plot_heatmap(histogram):
