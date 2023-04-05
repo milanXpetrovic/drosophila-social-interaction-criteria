@@ -1,3 +1,26 @@
+# [0.2.0](https://github.com/milanXpetrovic/fly-pipe/compare/v0.1.0...v0.2.0) (2023-04-05)
+
+
+### Bug Fixes
+
+* bug with ints ([d1cb061](https://github.com/milanXpetrovic/fly-pipe/commit/d1cb0616e33985cd3050700b6d56650795c782d2))
+* bug with ints ([a17d696](https://github.com/milanXpetrovic/fly-pipe/commit/a17d6966f2e45a311e7718d48fcd7d87c40c294d))
+* bug with ints ([50c0b6a](https://github.com/milanXpetrovic/fly-pipe/commit/50c0b6a75151fe57b205aedc6f12380c7e3aeb1c))
+* data folder restructured ([f25f3c9](https://github.com/milanXpetrovic/fly-pipe/commit/f25f3c9062d29562c08c85a64f3b206013ebb4a0))
+* fixed hist calculation to work with one function ([4e9f08b](https://github.com/milanXpetrovic/fly-pipe/commit/4e9f08b19077337d9d94a77b16ff83dde47fe967))
+* new modules ([39a5be9](https://github.com/milanXpetrovic/fly-pipe/commit/39a5be90048c500b90f8593ce0be3c3da62b69ae))
+* paths updated ([0d60d31](https://github.com/milanXpetrovic/fly-pipe/commit/0d60d31628ba9095452e37ce0e964751af5f8f4d))
+
+
+### Features
+
+* added multiprocessing ([7d2f71b](https://github.com/milanXpetrovic/fly-pipe/commit/7d2f71b4ff263f97d6521ab109d7a01f9b2c16e1))
+* fast_flag_interaction function added ([633510b](https://github.com/milanXpetrovic/fly-pipe/commit/633510b0431dbe1295b35f15466e2b222b72d7e3))
+* setings added ([f164e97](https://github.com/milanXpetrovic/fly-pipe/commit/f164e97bcffa06d3c5087aff980efab2e4cc941d))
+* settings aded ([b5765c9](https://github.com/milanXpetrovic/fly-pipe/commit/b5765c9754397917eacdb17e93efb639ae923d4b))
+
+
+
 # [0.1.0](https://github.com/milanXpetrovic/fly-pipe/compare/v0.0.2...v0.1.0) (2023-03-19)
 
 
