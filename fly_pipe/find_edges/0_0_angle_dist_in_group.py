@@ -206,58 +206,69 @@ while np.any(~np.any([angle, distance, time], axis=1)):
 
 
 #%%
-def fast_flag_interactions(normalized_dfs,timecut,minang,bl,start,exptime,nflies,fps,movecut):
-    bl = tempdistance
 
-    nflies = len(normalized_dfs)
-    m = 41040
+#%%
+def fast_flag_interactions(trx,timecut,minang,bl,start,exptime,nflies,fps,movecut):
+    sorted_keys = natsort.natsorted(trx.keys())
 
-    distances = np.zeros((nflies, nflies, m))
-    angles = np.zeros((nflies, nflies, m))
+    trx = {k: trx[k] for k in sorted_keys}
+    start=round(start*60*fps+1)
+    timecut=timecut*fps
+    m = [1,41040]
+    nflies = len(trx)
+
+    mindist = np.zeros((nflies, 1))
+    i = 0
+    for path in trx.values():
+        df = pd.read_csv(path, index_col=0)
+        mindist[i] = np.mean(df["a"])
+        i+=1
+
+    mindist = 4*bl*mindist
+
+    distances = np.zeros((nflies, nflies, m[1]))
+    angles = np.zeros((nflies, nflies, m[1]))
 
     for i in range(nflies):
         for ii in range(nflies):
-            fly1_key = list(normalized_dfs.keys())[i]
-            fly2_key = list(normalized_dfs.keys())[ii] 
-            
-            # df1 = normalized_dfs[fly1_key].copy(deep=True)
-            # df2 = normalized_dfs[fly2_key].copy(deep=True)
-
-            df1 = pd.read_csv(normalized_dfs[fly1_key], index_col=0)
-            df2 = pd.read_csv(normalized_dfs[fly2_key], index_col=0)
+            fly1_key = list(trx.keys())[i]
+            fly2_key = list(trx.keys())[ii] 
+            df1 = pd.read_csv(trx[fly1_key], index_col=0)
+            df2 = pd.read_csv(trx[fly2_key], index_col=0)
             
             df1_array = df1.to_numpy()
             df2_array = df2.to_numpy()
 
-            mindinst = np.mean(df1_array[:, 3]) # 'a' column of fly df
-            mindist = 4 * bl * mindinst
-
             distance = np.sqrt((df1_array[:, 0] - df2_array[:, 0])**2
                                     + (df1_array[:, 1] - df2_array[:, 1])**2)
-            distances[i, ii, :] = np.round(distance) #/ (a * 4), 4
+            distances[i, ii, :] = distance #/ (a * 4), 4
 
             checkang = np.arctan2(
                 df2_array[:, 1] - df1_array[:, 1], df2_array[:, 0] - df1_array[:, 0])
             checkang = checkang * 180 / np.pi
 
             angle = SL.angledifference_nd(checkang, df1_array[:, 2]*180/np.pi)
-            angles[i, ii, :] = np.round(angle)
-            
-    ints = np.double(np.abs(angles) < minang) + np.double(distance < np.tile(mindist, (1, nflies, m)))
+            angles[i, ii, :] = angle
+
+
+    ints = np.double(np.abs(angles) < minang) + np.double(distances < np.tile(mindist, (nflies, 1, m[1])))
     ints[ints < 2] = 0
     ints[ints > 1] = 1
 
     for i in range(nflies):
         for ii in range(nflies):
             if i == ii:
-                ints[i, ii, :]= 0 ##np.zeros(len(angle))
+                ints[i, ii, :]= np.zeros(len(angle)) #np.ones(m[1]) 
 
-    r, c, v = np.nonzero(ints)
-    int_times = np.zeros((nflies*m, 1))
+    idx = np.where(ints != 0)
+    r, c, v = idx[0], idx[1], idx[2]
+
+    int_times = np.zeros((nflies*m[1], 1))
     int_ind = 0
 
     for i in range(nflies):
         for ii in np.setxor1d(np.arange(nflies), i):
+
             temp = np.intersect1d(np.where(r == i), np.where(c == ii))
 
             if temp.size != 0:
@@ -266,31 +277,29 @@ def fast_flag_interactions(normalized_dfs,timecut,minang,bl,start,exptime,nflies
                 durations = np.zeros((len(nints) - 1, 1))
 
                 for ni in range(0, len(nints) - 1):
-                    durations[ni] = np.sum(np.arange(nints[ni] + 1, nints[ni + 1] - 1).size) + 1
+                    # durations[ni] = np.sum(np.arange(nints[ni], nints[ni]).size) + 1
+                    # if np.sum(np.arange(nints[ni], nints[ni + 1] - 1).size) < timecut:
+                    #     potential_ints[nints[ni]:nints[ni + 1] - 1] = np.nan
+                    # else:
+                    #     pass
+                    
+                    int_times[int_ind] = np.sum(np.array([len(potential_ints[nints[ni]:nints[ni+1]-1])]))
+                    int_ind+=1
 
-                    if np.sum(np.arange(nints[ni], nints[ni + 1] - 1).size) < timecut:
-                        potential_ints[nints[ni]:nints[ni + 1] - 1] = np.nan
-
-                    else:
-                        int_times[int_ind] = np.sum(np.arange(nints[ni], nints[ni + 1] - 1).size)
-                        int_ind+=1
-
-                        if movecut:
-                            #int_times[int_ind] = int_times[int_ind] - np.sum(too_slow[r[temp[nints[ni]:nints[ni + 1] - 1]], v[temp[nints[ni]:nints[ni + 1] - 1]] : v[temp[nints[ni] : nints[ni + 1] - 1]]) 
-                            pass
-
-                inds_nan = np.where(np.isnan(potential_ints))[0]
-                ints[i, ii, v[temp[inds_nan]]] = 0
-                inds_inf = np.where(potential_ints[:-1] > 1)[0]
-                ints[i, ii, v[temp[inds_inf]]] = np.inf
+                    if movecut:
+                        #int_times[int_ind] = int_times[int_ind] - np.sum(too_slow[r[temp[nints[ni]:nints[ni + 1] - 1]], v[temp[nints[ni]:nints[ni + 1] - 1]] : v[temp[nints[ni] : nints[ni + 1] - 1]]) 
+                        pass
 
     int_times = int_times[:int_ind-1] / settings.FPS
+    int_times = int_times[int_times != 0]
 
+    print(len(int_times))
     return int_times
 
 
 import json
 import random
+import natsort
 from fly_pipe import settings
 from fly_pipe.utils import fileio
 import sys
@@ -298,17 +307,19 @@ import fly_pipe.utils.automated_schneider_levine as SL
 import pandas as pd
 import numpy as np
 import itertools
+
 treatment = fileio.load_multiple_folders(settings.TRACKINGS)
 
 temp_ind =  random.sample(range(len(treatment)), settings.RANDOM_GROUP_SIZE)
 temp_ind.sort()
 
-minang=140
-bl=tempdistance=1.5
-timecut, movecut = 0, 0
-start, exptime = 0, 30
-nflies = 12
-fps = 22.8
+minang=angle=140
+bl=1.5
+start=0
+stop=exptime=30
+nnflies = nflies =12
+fps=22.8
+timecut, movecut=0, 0
 
 # pick_random_groups = {list(treatment.keys())[i]: list(treatment.values())[i] for i in temp_ind}
 
@@ -330,16 +341,18 @@ pick_random_groups={
 'CSf_movie_20': '/home/mile/fly-pipe/data/input/trackings/CSf/CSf_movie_20',
 }
 
+
 tstrain = [None] * len(pick_random_groups)
 
 for i in range(len(pick_random_groups)):
     key = list(pick_random_groups.keys())[i]
     group_path = pick_random_groups[key]
-    # normalized_dfs, pxpermm_dict = SL.normalize_random_group(group)    
-    normalized_dfs = fileio.load_files_from_folder(group_path, file_format='.csv')
+   
+    trx = fileio.load_files_from_folder(group_path, file_format='.csv')
 
-    tstrain[i] = fast_flag_interactions(normalized_dfs,timecut,minang,bl,start,exptime,nflies,fps,movecut)
+    tstrain[i] = fast_flag_interactions(trx,timecut,minang,bl,start,exptime,nflies,fps,movecut)
 
+#%%
 for i in range(len(pick_random_groups)):
     print(tstrain[i].shape)
 
