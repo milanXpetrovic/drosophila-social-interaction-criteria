@@ -283,7 +283,7 @@ def fast_flag_interactions(trx,timecut,minang,bl,start,exptime,nflies,fps,movecu
                     # else:
                     #     pass
                     
-                    int_times[int_ind] = np.sum(np.array([len(potential_ints[nints[ni]:nints[ni+1]-1])]))
+                    int_times[int_ind] = np.sum(np.array([len(potential_ints[nints[ni]:nints[ni+1]])]))
                     int_ind+=1
 
                     if movecut:
