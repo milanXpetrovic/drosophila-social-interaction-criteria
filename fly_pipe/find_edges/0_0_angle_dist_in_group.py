@@ -206,33 +206,11 @@ while np.any(~np.any([angle, distance, time], axis=1)):
 
 
 #%%
-import json
-import random
-from fly_pipe import settings
-from fly_pipe.utils import fileio
-import sys
-import fly_pipe.utils.automated_schneider_levine as SL
-import pandas as pd
-import numpy as np
-import itertools
-treatment = fileio.load_multiple_folders(settings.TRACKINGS)
-
-temp_ind =  random.sample(range(len(treatment)), settings.RANDOM_GROUP_SIZE)
-temp_ind.sort()
-
-pick_random_groups = {list(treatment.keys())[i]: list(treatment.values())[i] for i in temp_ind}
-normalized_dfs, pxpermm_dict = SL.normalize_random_group(pick_random_groups)
-minang=25
-tempdistance=0.5
-timecut = 0
-movecut = 0
-
-
 def fast_flag_interactions(normalized_dfs,timecut,minang,bl,start,exptime,nflies,fps,movecut):
     bl = tempdistance
 
     nflies = len(normalized_dfs)
-    m = len(list(normalized_dfs.values())[0])
+    m = 41040
 
     distances = np.zeros((nflies, nflies, m))
     angles = np.zeros((nflies, nflies, m))
@@ -241,10 +219,13 @@ def fast_flag_interactions(normalized_dfs,timecut,minang,bl,start,exptime,nflies
         for ii in range(nflies):
             fly1_key = list(normalized_dfs.keys())[i]
             fly2_key = list(normalized_dfs.keys())[ii] 
+            
+            # df1 = normalized_dfs[fly1_key].copy(deep=True)
+            # df2 = normalized_dfs[fly2_key].copy(deep=True)
 
-            df1 = normalized_dfs[fly1_key].copy(deep=True)
-            df2 = normalized_dfs[fly2_key].copy(deep=True)
-
+            df1 = pd.read_csv(normalized_dfs[fly1_key], index_col=0)
+            df2 = pd.read_csv(normalized_dfs[fly2_key], index_col=0)
+            
             df1_array = df1.to_numpy()
             df2_array = df2.to_numpy()
 
@@ -298,9 +279,6 @@ def fast_flag_interactions(normalized_dfs,timecut,minang,bl,start,exptime,nflies
                             #int_times[int_ind] = int_times[int_ind] - np.sum(too_slow[r[temp[nints[ni]:nints[ni + 1] - 1]], v[temp[nints[ni]:nints[ni + 1] - 1]] : v[temp[nints[ni] : nints[ni + 1] - 1]]) 
                             pass
 
-                # ints[i, ii, v[temp[np.isnan(potential_ints)]]] = 0
-                # ints[i, ii, v[temp[potential_ints[:-1] > 1]]] = np.inf
-
                 inds_nan = np.where(np.isnan(potential_ints))[0]
                 ints[i, ii, v[temp[inds_nan]]] = 0
                 inds_inf = np.where(potential_ints[:-1] > 1)[0]
@@ -310,3 +288,64 @@ def fast_flag_interactions(normalized_dfs,timecut,minang,bl,start,exptime,nflies
 
     return int_times
 
+
+import json
+import random
+from fly_pipe import settings
+from fly_pipe.utils import fileio
+import sys
+import fly_pipe.utils.automated_schneider_levine as SL
+import pandas as pd
+import numpy as np
+import itertools
+treatment = fileio.load_multiple_folders(settings.TRACKINGS)
+
+temp_ind =  random.sample(range(len(treatment)), settings.RANDOM_GROUP_SIZE)
+temp_ind.sort()
+
+minang=140
+bl=tempdistance=1.5
+timecut, movecut = 0, 0
+start, exptime = 0, 30
+nflies = 12
+fps = 22.8
+
+# pick_random_groups = {list(treatment.keys())[i]: list(treatment.values())[i] for i in temp_ind}
+
+pick_random_groups={
+'CSf_movie_16': '/home/mile/fly-pipe/data/input/trackings/CSf/CSf_movie_16',
+'CSf_movie_10': '/home/mile/fly-pipe/data/input/trackings/CSf/CSf_movie_10',  
+'CSf_movie_24': '/home/mile/fly-pipe/data/input/trackings/CSf/CSf_movie_24',
+'CSf_movie_12': '/home/mile/fly-pipe/data/input/trackings/CSf/CSf_movie_12',
+'CSf_movie_04': '/home/mile/fly-pipe/data/input/trackings/CSf/CSf_movie_04',
+'CSf_movie_13': '/home/mile/fly-pipe/data/input/trackings/CSf/CSf_movie_13',
+'CSf_movie_11': '/home/mile/fly-pipe/data/input/trackings/CSf/CSf_movie_11',
+'CSf_movie_14': '/home/mile/fly-pipe/data/input/trackings/CSf/CSf_movie_14',
+'CSf_movie_21': '/home/mile/fly-pipe/data/input/trackings/CSf/CSf_movie_21',
+'CSf_movie_07': '/home/mile/fly-pipe/data/input/trackings/CSf/CSf_movie_07',
+'CSf_movie_23': '/home/mile/fly-pipe/data/input/trackings/CSf/CSf_movie_23',
+'CSf_movie_26': '/home/mile/fly-pipe/data/input/trackings/CSf/CSf_movie_26',
+'CSf_movie_09': '/home/mile/fly-pipe/data/input/trackings/CSf/CSf_movie_09',
+'CSf_movie_15': '/home/mile/fly-pipe/data/input/trackings/CSf/CSf_movie_15',
+'CSf_movie_20': '/home/mile/fly-pipe/data/input/trackings/CSf/CSf_movie_20',
+}
+
+tstrain = [None] * len(pick_random_groups)
+
+for i in range(len(pick_random_groups)):
+    key = list(pick_random_groups.keys())[i]
+    group_path = pick_random_groups[key]
+    # normalized_dfs, pxpermm_dict = SL.normalize_random_group(group)    
+    normalized_dfs = fileio.load_files_from_folder(group_path, file_format='.csv')
+
+    tstrain[i] = fast_flag_interactions(normalized_dfs,timecut,minang,bl,start,exptime,nflies,fps,movecut)
+
+for i in range(len(pick_random_groups)):
+    print(tstrain[i].shape)
+
+
+
+
+#%%
+ptstrain=boot_pseudo_times(strain,nrand2,temp_ind,tempangle,tempdistance,start,exptime,offsettime,resample,movecut,1);
+#%%
