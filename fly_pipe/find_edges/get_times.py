@@ -81,12 +81,15 @@ for i in range(nflies):
     for ii in range(nflies):
         if i == ii:
             ints[i, ii, :]= np.zeros(len(angle)) #np.ones(m[1]) 
-
-# print(np.unique(ints, return_counts=True))
 #%%
-r, c, v = np.nonzero(ints)
+# print(np.unique(ints, return_counts=True))
+idx = np.where(ints != 0)
+r, c, v = idx[0], idx[1], idx[2]
+
 int_times = np.zeros((nflies*m[1], 1))
 int_ind = 0
+
+print(len(r),len(c),len(v))
 
 for i in range(nflies):
     for ii in np.setxor1d(np.arange(nflies), i):
@@ -100,15 +103,14 @@ for i in range(nflies):
 
             for ni in range(0, len(nints) - 1):
                 # durations[ni] = np.sum(np.arange(nints[ni], nints[ni]).size) + 1
-
                 # if np.sum(np.arange(nints[ni], nints[ni + 1] - 1).size) < timecut:
                 #     potential_ints[nints[ni]:nints[ni + 1] - 1] = np.nan
 
                 # else:
                 #     pass
-                print(potential_ints[nints[ni]:nints[ni+1]])
                 
-                int_times[int_ind] = sum(potential_ints[nints[ni]:nints[ni+1]])
+                int_times[int_ind] = np.sum(np.array([len(potential_ints[nints[ni]:nints[ni+1]-1])]))
+
                 int_ind+=1
 
                 if movecut:
@@ -120,10 +122,22 @@ for i in range(nflies):
             # inds_inf = np.where(potential_ints[:-1] > 1)[0]
             # ints[i, ii, v[temp[inds_inf]]] = np.inf
 
-# int_times = int_times[:int_ind-1] / settings.FPS
+int_times = int_times[:int_ind-1] / settings.FPS
+
+int_times = int_times[int_times != 0]
 print(len(int_times))
 #%%
 print(len(np.unique(int_times)))
 
 #%%
-print(len(test), len(int_times))
+test = np.sort(test)
+int_times = np.sort(int_times)
+
+v=0
+for mat, pyt in zip(test, int_times):
+    mat = mat[0].round()
+    pyt = pyt.round()
+    if mat==pyt:
+        v+=1
+
+print(v)
