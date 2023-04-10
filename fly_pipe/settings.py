@@ -16,7 +16,8 @@ N_RANDOM_PASSES = 500
 MOVECUT = True
 
 # Paths
-ROOT_DIR = os.path.dirname(os.path.dirname(__file__))
+# ROOT_DIR = os.path.dirname(os.path.dirname(__file__))
+ROOT_DIR = "/home/mile/fly-pipe"
 LOGS_DIR = os.path.join(ROOT_DIR, 'logs')
 
 # Input files
