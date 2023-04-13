@@ -1,4 +1,5 @@
 # %%
+import warnings
 import itertools
 import pandas as pd
 import natsort
@@ -121,7 +122,7 @@ def fast_flag_interactions(trx, timecut, minang, bl, start, exptime, nflies, fps
     int_times = int_times[:int_ind-1] / settings.FPS
     int_times = int_times[int_times != 0]
 
-    print(f"len int_times: {len(int_times)}")
+    # print(f"len int_times: {len(int_times)}")
     return int_times
 
 
@@ -254,6 +255,7 @@ def pseudo_fast_flag_interactions(trx, timecut, minang, bl, start, exptime, nfli
 
 def boot_pseudo_times(treatment, nrand2, temp_ind, tempangle, tempdistance, start, exptime):
 
+    rand_rot = 1
     pick_random_groups = {list(treatment.keys())[i]: list(
         treatment.values())[i] for i in temp_ind}
 
@@ -283,22 +285,22 @@ def boot_pseudo_times(treatment, nrand2, temp_ind, tempangle, tempdistance, star
                 trx.update({fly_key: pd.DataFrame(dict_values)})
 
         times[pi] = pseudo_fast_flag_interactions(
-            trx, 0, tempangle, tempdistance, start, exptime, nflies, settings.FPS, movecut)
+            trx, 0, tempangle, tempdistance, start, exptime, nflies, settings.FPS, 0)
 
     return times
 
 
 # %%
-if __name__ == '__main__':
+# if __name__ == '__main__':
 
-    OUTPUT_PATH = os.path.join(
-        "../../data/find_edges/0_0_angle_dist_in_group/", settings.TREATMENT)
+#     OUTPUT_PATH = os.path.join(
+#         "../../data/find_edges/0_0_angle_dist_in_group/", settings.TREATMENT)
 
-    os.makedirs(OUTPUT_PATH, exist_ok=True)
+#     os.makedirs(OUTPUT_PATH, exist_ok=True)
 
-    normalization = json.load(open(settings.NROMALIZATION))
-    pxpermm = json.load(open(settings.PXPERMM))
-    treatment = fileio.load_multiple_folders(settings.TRACKINGS)
+#     normalization = json.load(open(settings.NROMALIZATION))
+#     pxpermm = json.load(open(settings.PXPERMM))
+#     treatment = fileio.load_multiple_folders(settings.TRACKINGS)
 
     # all_hists = []
     # for group_name, group_path in treatment.items():
@@ -325,14 +327,18 @@ if __name__ == '__main__':
     # np.save("{}/{}".format(OUTPUT_PATH, "null"), res)
 
 # %%
-ni = 0
+# filter out all warnings
 
+warnings.filterwarnings("ignore")
+
+ni = 0
 angle = np.zeros((500, 1))
 distance = np.zeros((500, 1))
 time = np.zeros((500, 1))
 
 treatment = fileio.load_multiple_folders(settings.TRACKINGS)
 
+print("starting big while")
 while np.any(~np.any([angle, distance, time], axis=1)):
     temp_ind = random.sample(range(len(treatment)), settings.RANDOM_GROUP_SIZE)
     temp_ind.sort()
@@ -372,7 +378,6 @@ while np.any(~np.any([angle, distance, time], axis=1)):
     test = np.zeros_like(N2)
     test[bcenter[0]:bcenter[-1], acenter1:acenter2] = 1
     G = np.where(test != 0)[0]
-    # print(G)
 
     # Find connected components in N2
     labeled_array, num_features = ndimage.label(N2)
@@ -417,17 +422,23 @@ while np.any(~np.any([angle, distance, time], axis=1)):
     N2 = superN/n - pseudo_N/nrand2
     meanN2 = np.mean(N2)
 
+    nrand1 = 500
+
     storeN = np.zeros((len(C[0])-1, len(C[1])-2))
     storeN = storeN.T
-    nrand1 = 500
-    distance_bin = 5
+    storeT = np.zeros((len(np.arange(0, 30*60 + 0.05, 0.05)), nrand1))
 
+    distance_bin = 5
     # assuming tempangle, tempdistance, superN, pseudo_N, nrand1, and storeN are already defined as per previous code
+    print("entering big IF")
+
     if tempangle.size != 0 and tempdistance is not None:
         storeN = storeN + (superN/np.sum(superN) -
                            pseudo_N/np.sum(pseudo_N))/nrand1
 
         keepitgoing = True
+
+        print("WHILE in IF")
         while keepitgoing:
             temp = N2[np.ix_(np.arange(np.where(C[0] == 1)[0][0], np.where(C[0] == tempdistance)[0][0]+1),
                              np.arange(np.where(C[1] == -tempangle)[0][0], np.where(C[1] == tempangle)[0][0]+1))]
@@ -461,6 +472,7 @@ while np.any(~np.any([angle, distance, time], axis=1)):
             else:
                 keepitgoing = 0
 
+        print("done WHILE")
         angle[ni] = tempangle
         distance[ni] = tempdistance
 
@@ -485,26 +497,25 @@ while np.any(~np.any([angle, distance, time], axis=1)):
         # TODO: mahybe works faster if replaced list with numpy array
         ptstrain = boot_pseudo_times(
             treatment, nrand2, temp_ind, tempangle, tempdistance, start, exptime)
+        print("RUNING boot_pseudo_times")
 
         M = np.arange(0, 30*60+0.05, 0.05)
         N = np.zeros((len(ptstrain), len(M)-1))
 
         for i in range(len(ptstrain)):
-            temp = ptstrain[i][:-1]
-            temp = np.histogram(temp, bins=M)[0]
+            temp = np.histogram(ptstrain[i], bins=M)[0]
             temps = temp / np.sum(temp)
             temps = np.cumsum(temps[::-1])[::-1]
-
             N[i, :] = temps
 
         N[np.isnan(N)] = 0
         PN = np.sum(N, axis=0)
 
-        N = np.zeros((len(tstrain), len(M)))(15x36001)
-        for i in range(tstrain.shape[0]):
-            hist, _ = np.histogram(tstrain[i, :-1], bins=M)
+        N = np.zeros((len(tstrain), len(M)-1))  # (15x36001)
+        for i in range(len(tstrain)):
+            hist, _ = np.histogram(tstrain[i], bins=M)
             temps = np.cumsum(hist / np.sum(hist))[::-1]
-            N[i, :] = temps[::-1]
+            N[i, :] = temps
 
         N[np.isnan(N)] = 0
         N = np.sum(N, axis=0)
@@ -514,7 +525,8 @@ while np.any(~np.any([angle, distance, time], axis=1)):
         ftemp = np.argmax(temp[0:round(len(M)/2)])
 
         keepgoing = True
-        ni = 0
+
+        print("LAST WHILE")
         while keepgoing:
             curmean = np.mean(temp[0:ftemp])
             posmean = np.mean(temp[0:ftemp+1])
@@ -527,16 +539,18 @@ while np.any(~np.any([angle, distance, time], axis=1)):
                 keepgoing = False
             try:
                 storeT[:, ni] = temp
-                ftemp = np.where(N*0.5 < N[ftemp])[0][0]
-                if ftemp is not None:
+                ftemp = np.where(N*0.5 < N[ftemp])[0]
+                if len(ftemp) > 0:
+                    ftemp = ftemp[0]
                     time[ni] = M[ftemp]
                     # Save data
-                    np.save('Saved_Criteria/'+strain+'_temp_home.npy',
+                    np.save("CSf"+'_temp_home.npy',
                             [storeT, time, distance, angle])
-                    print(
-                        f'Took {toc()/60:.2f} minutes for iteration {ni+1}/{nrand1} (Dist:{distance[ni]:.2f} Ang:{angle[ni]:.2f} Time:{time[ni]:.2f})')
+                    # print(
+                    #     f'Took {toc()/60:.2f} minutes for iteration {ni+1}/{nrand1} (Dist:{distance[ni]:.2f} Ang:{angle[ni]:.2f} Time:{time[ni]:.2f})')
                     ni += 1
-                    tic()
+                    print(ni)
+                    # tic()
             except:
                 # Could not find a good time estimate, so scrap this iteration
                 storeN = storeN - (superN/np.sum(superN) -
@@ -545,9 +559,5 @@ while np.any(~np.any([angle, distance, time], axis=1)):
                 angle[ni] = 0
                 time[ni] = 0
 
-
-# %%
-treatment = fileio.load_multiple_folders(settings.TRACKINGS)
-
-# temp_ind = random.sample(range(len(treatment)), settings.RANDOM_GROUP_SIZE)
-# temp_ind.sort()
+            print(ni)
+            print("skiping while")
