@@ -289,8 +289,6 @@ def boot_pseudo_times(treatment, nrand2, temp_ind, tempangle, tempdistance, star
 
     return times
 
-
-# %%
 # if __name__ == '__main__':
 
 #     OUTPUT_PATH = os.path.join(
@@ -326,8 +324,8 @@ def boot_pseudo_times(treatment, nrand2, temp_ind, tempangle, tempdistance, star
     # res = res.T
     # np.save("{}/{}".format(OUTPUT_PATH, "null"), res)
 
-# %%
 # filter out all warnings
+
 
 warnings.filterwarnings("ignore")
 
@@ -338,7 +336,7 @@ time = np.zeros((500, 1))
 
 treatment = fileio.load_multiple_folders(settings.TRACKINGS)
 
-print("starting big while")
+# print("starting big while")
 while np.any(~np.any([angle, distance, time], axis=1)):
     temp_ind = random.sample(range(len(treatment)), settings.RANDOM_GROUP_SIZE)
     temp_ind.sort()
@@ -430,7 +428,7 @@ while np.any(~np.any([angle, distance, time], axis=1)):
 
     distance_bin = 5
     # assuming tempangle, tempdistance, superN, pseudo_N, nrand1, and storeN are already defined as per previous code
-    print("entering big IF")
+    # print("entering big IF")
 
     if tempangle.size != 0 and tempdistance is not None:
         storeN = storeN + (superN/np.sum(superN) -
@@ -438,7 +436,7 @@ while np.any(~np.any([angle, distance, time], axis=1)):
 
         keepitgoing = True
 
-        print("WHILE in IF")
+        # print("WHILE in IF")
         while keepitgoing:
             temp = N2[np.ix_(np.arange(np.where(C[0] == 1)[0][0], np.where(C[0] == tempdistance)[0][0]+1),
                              np.arange(np.where(C[1] == -tempangle)[0][0], np.where(C[1] == tempangle)[0][0]+1))]
@@ -472,7 +470,7 @@ while np.any(~np.any([angle, distance, time], axis=1)):
             else:
                 keepitgoing = 0
 
-        print("done WHILE")
+        # print("done WHILE")
         angle[ni] = tempangle
         distance[ni] = tempdistance
 
@@ -497,7 +495,7 @@ while np.any(~np.any([angle, distance, time], axis=1)):
         # TODO: mahybe works faster if replaced list with numpy array
         ptstrain = boot_pseudo_times(
             treatment, nrand2, temp_ind, tempangle, tempdistance, start, exptime)
-        print("RUNING boot_pseudo_times")
+        # print("RUNING boot_pseudo_times")
 
         M = np.arange(0, 30*60+0.05, 0.05)
         N = np.zeros((len(ptstrain), len(M)-1))
@@ -526,38 +524,47 @@ while np.any(~np.any([angle, distance, time], axis=1)):
 
         keepgoing = True
 
-        print("LAST WHILE")
-        while keepgoing:
-            curmean = np.mean(temp[0:ftemp])
-            posmean = np.mean(temp[0:ftemp+1])
-            if curmean < posmean:
-                ftemp += 1
-            else:
-                keepgoing = False
-            if ftemp >= len(temp):
-                ftemp = ftemp - 1
-                keepgoing = False
-            try:
-                storeT[:, ni] = temp
-                ftemp = np.where(N*0.5 < N[ftemp])[0]
-                if len(ftemp) > 0:
-                    ftemp = ftemp[0]
-                    time[ni] = M[ftemp]
-                    # Save data
-                    np.save("CSf"+'_temp_home.npy',
-                            [storeT, time, distance, angle])
-                    # print(
-                    #     f'Took {toc()/60:.2f} minutes for iteration {ni+1}/{nrand1} (Dist:{distance[ni]:.2f} Ang:{angle[ni]:.2f} Time:{time[ni]:.2f})')
-                    ni += 1
-                    print(ni)
-                    # tic()
-            except:
-                # Could not find a good time estimate, so scrap this iteration
-                storeN = storeN - (superN/np.sum(superN) -
-                                   pseudo_N/np.sum(pseudo_N)) / nrand1
-                distance[ni] = 0
-                angle[ni] = 0
-                time[ni] = 0
+        # print("LAST WHILE")
 
-            print(ni)
-            print("skiping while")
+        try:
+            keepgoing = True
+
+            while keepgoing:
+                curmean = np.mean(temp[0:ftemp])
+                posmean = np.mean(temp[0:ftemp+1])
+
+                if curmean < posmean:
+                    ftemp += 1
+                else:
+                    keepgoing = False
+
+                if ftemp >= len(temp):
+                    ftemp = ftemp - 1
+                    keepgoing = False
+
+            storeT[:, ni] = temp
+            ftemp = np.where(N*0.5 < N[ftemp])[0][0]
+            if len(ftemp) > 0:
+                ftemp = ftemp[0]
+                time[ni] = M[ftemp]
+                # Save data
+                np.save("CSf"+'_temp_home.npy',
+                        [storeT, time, distance, angle])
+                # print(
+                #     f'Took {toc()/60:.2f} minutes for iteration {ni+1}/{nrand1} (Dist:{distance[ni]:.2f} Ang:{angle[ni]:.2f} Time:{time[ni]:.2f})')
+                ni += 1
+                print("increased")
+                print(ni)
+                # tic()
+        except:
+            # Could not find a good time estimate, so scrap this iteration
+            storeN = storeN - (superN/np.sum(superN) -
+                               pseudo_N/np.sum(pseudo_N)) / nrand1
+            distance[ni] = 0
+            angle[ni] = 0
+            time[ni] = 0
+
+        print(ni)
+        # print("skiping while")
+
+# %%
