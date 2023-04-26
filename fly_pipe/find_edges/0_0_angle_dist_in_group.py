@@ -424,7 +424,8 @@ while np.any(~np.any([angle, distance, time], axis=1)):
 
     storeN = np.zeros((len(C[0])-1, len(C[1])-2))
     storeN = storeN.T
-    storeT = np.zeros((len(np.arange(0, 30*60 + 0.05, 0.05)), nrand1))
+    storeT = np.zeros((len(np.arange(0, 30*60, 0.05)), nrand1))
+    # FIX THIS LEN TO 36000
 
     distance_bin = 5
     # assuming tempangle, tempdistance, superN, pseudo_N, nrand1, and storeN are already defined as per previous code
@@ -517,14 +518,9 @@ while np.any(~np.any([angle, distance, time], axis=1)):
 
         N[np.isnan(N)] = 0
         N = np.sum(N, axis=0)
-
         temp = N/n - PN/nrand2
-
         ftemp = np.argmax(temp[0:round(len(M)/2)])
-
         keepgoing = True
-
-        # print("LAST WHILE")
 
         try:
             keepgoing = True
@@ -543,7 +539,7 @@ while np.any(~np.any([angle, distance, time], axis=1)):
                     keepgoing = False
 
             storeT[:, ni] = temp
-            ftemp = np.where(N*0.5 < N[ftemp])[0][0]
+            ftemp = np.where(N*0.5 < N[ftemp])[0]
             if len(ftemp) > 0:
                 ftemp = ftemp[0]
                 time[ni] = M[ftemp]
@@ -556,7 +552,9 @@ while np.any(~np.any([angle, distance, time], axis=1)):
                 print("increased")
                 print(ni)
                 # tic()
-        except:
+        except Exception as e:
+
+            print(e)
             # Could not find a good time estimate, so scrap this iteration
             storeN = storeN - (superN/np.sum(superN) -
                                pseudo_N/np.sum(pseudo_N)) / nrand1
