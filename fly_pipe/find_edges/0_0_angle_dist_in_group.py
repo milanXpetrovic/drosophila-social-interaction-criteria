@@ -564,14 +564,22 @@ while np.any(~np.any([angle, distance, time], axis=1)):
 
             storeT[:, ni] = temp
             ftemp = np.where(N*0.5 < N[ftemp])[0]
+
+            print(len(ftemp))
             if len(ftemp) > 0:
                 ftemp = ftemp[0]
                 time[ni] = M[ftemp]
                 # Save data
                 # np.save("CSf"+'_temp_home.npy',
                 #         [storeT, time, distance, angle])
-                print(
-                    f'Took {toc()/60:.2f} minutes for iteration {ni+1}/{nrand1} (Dist:{distance[ni]:.2f} Ang:{angle[ni]:.2f} Time:{time[ni]:.2f})')
+                print({ni+1}/{nrand1})
+
+                print(distance[ni]
+                print(Ang: {angle[ni]: .2f}
+                print(Time: {time[ni]: .2f})')
+
+
+
 
                 ni += 1
                 print("increased")
@@ -581,11 +589,11 @@ while np.any(~np.any([angle, distance, time], axis=1)):
 
             print(e)
             # Could not find a good time estimate, so scrap this iteration
-            storeN = storeN - (superN/np.sum(superN) -
+            storeN=storeN - (superN/np.sum(superN) -
                                pseudo_N/np.sum(pseudo_N)) / nrand1
-            distance[ni] = 0
-            angle[ni] = 0
-            time[ni] = 0
+            distance[ni]=0
+            angle[ni]=0
+            time[ni]=0
 
         print(ni)
         # print("skiping while")
