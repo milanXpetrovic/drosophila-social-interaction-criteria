@@ -342,12 +342,9 @@ while np.any(~np.any([angle, distance, time], axis=1)):
     temp_ind.sort()
 
     superN = np.load(
-        "/home/mile/fly-pipe/data/find_edges/0_0_angle_dist_in_group/CSf/real.npy")
+        "/home/milky/fly-pipe/data/find_edges/0_0_angle_dist_in_group/CSf/real.npy")
 
-    # pseudo_N = SL.boot_pseudo_fly_space(treatment, temp_ind)
-
-    pseudo_N = np.load(
-        "/home/mile/fly-pipe/data/find_edges/0_0_angle_dist_in_group/CSf/null.npy")
+    pseudo_N = SL.boot_pseudo_fly_space(treatment, temp_ind)
 
     sum_superN = np.sum(superN)
     sum_pseudo_N = np.sum(pseudo_N)
@@ -474,26 +471,8 @@ while np.any(~np.any([angle, distance, time], axis=1)):
         angle[ni] = tempangle
         distance[ni] = tempdistance
 
-        # pick_random_groups = {list(treatment.keys())[i]: list(
-        #     treatment.values())[i] for i in temp_ind}
-
-        pick_random_groups = {
-            'CSf_movie_10': '/home/mile/fly-pipe/data/input/trackings/CSf/CSf_movie_10',
-            'CSf_movie_21': '/home/mile/fly-pipe/data/input/trackings/CSf/CSf_movie_21',
-            'CSf_movie_07': '/home/mile/fly-pipe/data/input/trackings/CSf/CSf_movie_07',
-            'CSf_movie_19': '/home/mile/fly-pipe/data/input/trackings/CSf/CSf_movie_19',
-            'CSf_movie_18': '/home/mile/fly-pipe/data/input/trackings/CSf/CSf_movie_18',
-            'CSf_movie_14': '/home/mile/fly-pipe/data/input/trackings/CSf/CSf_movie_14',
-            'CSf_movie_16': '/home/mile/fly-pipe/data/input/trackings/CSf/CSf_movie_16',
-            'CSf_movie_22': '/home/mile/fly-pipe/data/input/trackings/CSf/CSf_movie_22',
-            'CSf_movie_26': '/home/mile/fly-pipe/data/input/trackings/CSf/CSf_movie_26',
-            'CSf_movie_12': '/home/mile/fly-pipe/data/input/trackings/CSf/CSf_movie_12',
-            'CSf_movie_09': '/home/mile/fly-pipe/data/input/trackings/CSf/CSf_movie_09',
-            'CSf_movie_08': '/home/mile/fly-pipe/data/input/trackings/CSf/CSf_movie_08',
-            'CSf_movie_17': '/home/mile/fly-pipe/data/input/trackings/CSf/CSf_movie_17',
-            'CSf_movie_20': '/home/mile/fly-pipe/data/input/trackings/CSf/CSf_movie_20',
-            'CSf_movie_11': '/home/mile/fly-pipe/data/input/trackings/CSf/CSf_movie_11'
-        }
+        pick_random_groups = {list(treatment.keys())[i]: list(
+            treatment.values())[i] for i in temp_ind}
 
         tstrain = [None] * len(pick_random_groups)
         start = 0
@@ -537,13 +516,6 @@ while np.any(~np.any([angle, distance, time], axis=1)):
         temp = N/n - PN/nrand2
         ftemp = np.argmax(temp[0:round(len(M)/2)])
 
-        # try:
-        #     if ftemp > 0:
-        #         np.save(
-        #             "/home/mile/fly-pipe/data/find_edges/0_0_angle_dist_in_group/CSf/null.npy", pseudo_N)
-        # except:
-        #     pass
-
         keepgoing = True
 
         try:
@@ -572,30 +544,22 @@ while np.any(~np.any([angle, distance, time], axis=1)):
                 # Save data
                 # np.save("CSf"+'_temp_home.npy',
                 #         [storeT, time, distance, angle])
-                print({ni+1}/{nrand1})
-
-                print(distance[ni]
-                print(Ang: {angle[ni]: .2f}
-                print(Time: {time[ni]: .2f})')
-
-
-
+                print(str(ni) + "distance " +
+                      str(distance[ni]) + "angle " + str(angle[ni]) + "time " + str(time[ni]))
 
                 ni += 1
-                print("increased")
-                print(ni)
+
                 # tic()
         except Exception as e:
 
             print(e)
             # Could not find a good time estimate, so scrap this iteration
-            storeN=storeN - (superN/np.sum(superN) -
+            storeN = storeN - (superN/np.sum(superN) -
                                pseudo_N/np.sum(pseudo_N)) / nrand1
-            distance[ni]=0
-            angle[ni]=0
-            time[ni]=0
+            distance[ni] = 0
+            angle[ni] = 0
+            time[ni] = 0
 
-        print(ni)
         # print("skiping while")
 
 # %%
