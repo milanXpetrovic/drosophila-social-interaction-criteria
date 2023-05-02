@@ -1,3 +1,12 @@
+## [0.2.1](https://github.com/milanXpetrovic/fly-pipe/compare/v0.2.0...v0.2.1) (2023-05-02)
+
+
+### Bug Fixes
+
+* catching error with except ([211ee36](https://github.com/milanXpetrovic/fly-pipe/commit/211ee36b63e91f5976b5299278ba04315f20b745))
+
+
+
 # [0.2.0](https://github.com/milanXpetrovic/fly-pipe/compare/v0.1.0...v0.2.0) (2023-04-05)
 
 
