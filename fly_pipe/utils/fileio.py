@@ -14,7 +14,7 @@ def natural_sort(l):
 def load_multiple_folders(path):
     # import foldera sa vise foldera unutar kojih su csv podaci
     if not os.path.exists(path) or not os.path.isdir(path):
-        sys.exit('Invalid path!')
+        sys.exit(f'{path} is invalid path!')
 
     # Check if the directory is empty
     subfolders = [f.name for f in os.scandir(path) if f.is_dir()]
