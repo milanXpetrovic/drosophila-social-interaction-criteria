@@ -12,6 +12,8 @@ import multiprocessing
 
 import numpy as np
 
+import concurrent.futures
+
 from scipy import ndimage
 from scipy.signal import convolve2d
 
@@ -262,67 +264,74 @@ def boot_pseudo_times(treatment, nrand2, temp_ind, tempangle, tempdistance, star
     normalized_dfs, pxpermm = SL.normalize_random_group(pick_random_groups)
     nflies = len(normalized_dfs)
 
+    trx = {}
+    for fly_key in normalized_dfs:
+        fly = normalized_dfs[fly_key]
+        if rand_rot:
+            rand_rot_value = random.randint(1, 360)
+            x = fly['pos x'].to_numpy()
+            y = fly['pos y'].to_numpy()
+            coords = rotation(np.column_stack((x, y)),
+                              [.5, .5], np.random.randint(rand_rot_value))
+
+            x_rot, y_rot = coords[:, 0], coords[:, 1]
+            theta = fly['ori'].to_numpy()
+            a = fly['a'].to_numpy()
+            pxpermm_val = pxpermm[fly_key]
+
+            dict_values = {"pos x": x_rot, "pos y": y_rot,
+                           "ori": theta, "a": a, "pxpermm": pxpermm_val}
+            trx.update({fly_key: pd.DataFrame(dict_values)})
+
     times = [None] * nrand2
-    for pi in range(nrand2):
+    # for pi in range(nrand2):
 
-        trx = {}
-        for fly_key in normalized_dfs:
-            fly = normalized_dfs[fly_key]
-            if rand_rot:
-                rand_rot_value = random.randint(1, 360)
-                x = fly['pos x'].to_numpy()
-                y = fly['pos y'].to_numpy()
-                coords = rotation(np.column_stack((x, y)),
-                                  [.5, .5], np.random.randint(rand_rot_value))
+    #     times[pi] = pseudo_fast_flag_interactions(
+    #         trx, 0, tempangle, tempdistance, start, exptime, nflies, settings.FPS, 0)
+    with concurrent.futures.ProcessPoolExecutor() as executor:
+        futures = [executor.submit(pseudo_fast_flag_interactions, trx, 0, tempangle, tempdistance, start, exptime, nflies, settings.FPS, 0)
+                   for _ in range(nrand2)]
 
-                x_rot, y_rot = coords[:, 0], coords[:, 1]
-                theta = fly['ori'].to_numpy()
-                a = fly['a'].to_numpy()
-                pxpermm_val = pxpermm[fly_key]
-
-                dict_values = {"pos x": x_rot, "pos y": y_rot,
-                               "ori": theta, "a": a, "pxpermm": pxpermm_val}
-                trx.update({fly_key: pd.DataFrame(dict_values)})
-
-        times[pi] = pseudo_fast_flag_interactions(
-            trx, 0, tempangle, tempdistance, start, exptime, nflies, settings.FPS, 0)
+    for pi, future in enumerate(concurrent.futures.as_completed(futures)):
+        times[pi] = future.result()
 
     return times
 
+
 # if __name__ == '__main__':
 
-#     OUTPUT_PATH = os.path.join(
-#         "../../data/find_edges/0_0_angle_dist_in_group/", settings.TREATMENT)
+# OUTPUT_PATH = os.path.join(
+#     "../../data/find_edges/0_0_angle_dist_in_group/", settings.TREATMENT)
 
-#     os.makedirs(OUTPUT_PATH, exist_ok=True)
+# os.makedirs(OUTPUT_PATH, exist_ok=True)
 
-#     normalization = json.load(open(settings.NROMALIZATION))
-#     pxpermm = json.load(open(settings.PXPERMM))
-#     treatment = fileio.load_multiple_folders(settings.TRACKINGS)
+# normalization = json.load(open(settings.NROMALIZATION))
+# pxpermm = json.load(open(settings.PXPERMM))
+# treatment = fileio.load_multiple_folders(settings.TRACKINGS)
 
-    # all_hists = []
-    # for group_name, group_path in treatment.items():
-    #     print(group_name)
+# all_hists = []
+# for group_name, group_path in treatment.items():
+#     print(group_name)
 
-    #     group = fileio.load_files_from_folder(group_path, file_format='.csv')
-    #     normalized_dfs, pxpermm_group = SL.normalize_group(
-    #         group, normalization, pxpermm, group_name)
+#     group = fileio.load_files_from_folder(group_path, file_format='.csv')
+#     normalized_dfs, pxpermm_group = SL.normalize_group(
+#         group, normalization, pxpermm, group_name)
 
-    #     hist = SL.group_space_angle_hist(normalized_dfs, pxpermm_group)
-    #     all_hists.append(hist)
+#     hist = SL.group_space_angle_hist(normalized_dfs, pxpermm_group)
+#     all_hists.append(hist)
 
-    # res = np.sum(all_hists, axis=0)
-    # res = res.T
+# res = np.sum(all_hists, axis=0)
+# res = res.T
 
-    # np.save("{}/{}".format(OUTPUT_PATH, "real"), hist)
+# np.save("{}/{}".format(OUTPUT_PATH, "real"), hist)
 
-    # with multiprocessing.Pool() as pool:
-    #     res = pool.map(
-    #         one_run_random, [(treatment, normalization, pxpermm) for _ in range(500)])
+# with multiprocessing.Pool() as pool:
+#     res = pool.map(
+#         one_run_random, [(treatment, normalization, pxpermm) for _ in range(500)])
 
-    # res = np.sum(res, axis=0)
-    # res = res.T
-    # np.save("{}/{}".format(OUTPUT_PATH, "null"), res)
+# res = np.sum(res, axis=0)
+# res = res.T
+# np.save("{}/{}".format(OUTPUT_PATH, "null"), res)
 
 # filter out all warnings
 
@@ -332,24 +341,47 @@ warnings.filterwarnings("ignore")
 ni = 0
 angle = np.zeros((500, 1))
 distance = np.zeros((500, 1))
-time = np.zeros((500, 1))
+time_arr = np.zeros((500, 1))
 
 treatment = fileio.load_multiple_folders(settings.TRACKINGS)
+normalization = json.load(open(settings.NROMALIZATION))
+pxpermm = json.load(open(settings.PXPERMM))
 
-# print("starting big while")
-while np.any(~np.any([angle, distance, time], axis=1)):
-    temp_ind = random.sample(range(len(treatment)), settings.RANDOM_GROUP_SIZE)
-    temp_ind.sort()
+sorted_keys = natsort.natsorted(treatment.keys())
+treatment = {k: treatment[k] for k in sorted_keys}
+
+#  np.any(~np.any([angle, distance, time_arr], axis=1))
+while ni < 500:
+    print(ni)
+    # temp_ind = random.sample(range(len(treatment)), settings.RANDOM_GROUP_SIZE)
+
+    temp_ind = [11, 16, 17, 14, 22, 18, 8, 1, 9, 15, 6, 24, 4, 20, 3]
+    temp_ind = [x-1 for x in temp_ind]
+
+    pick_random_groups = {list(treatment.keys())[i]: list(
+        treatment.values())[i] for i in temp_ind}
+
+    # all_hists = []
+    # for group_name, group_path in pick_random_groups.items():
+    #     print(group_name)
+    #     group = fileio.load_files_from_folder(group_path, file_format='.csv')
+    #     normalized_dfs, pxpermm_group = SL.normalize_group(
+    #         group, normalization, pxpermm, group_name)
+    #     hist = SL.group_space_angle_hist(normalized_dfs, pxpermm_group)
+    #     all_hists.append(hist)
+
+    # res = np.sum(all_hists, axis=0)
+    # superN = res.T
+
+    # np.save("/home/mile/fly-pipe/data/find_edges/0_0_angle_dist_in_group/CSf/superN.npy", superN)
 
     superN = np.load(
-        "/home/milky/fly-pipe/data/find_edges/0_0_angle_dist_in_group/CSf/real.npy")
+        "/home/mile/fly-pipe/data/find_edges/0_0_angle_dist_in_group/CSf/superN.npy")
+    superN = superN.T
 
     pseudo_N = SL.boot_pseudo_fly_space(treatment, temp_ind)
 
-    sum_superN = np.sum(superN)
-    sum_pseudo_N = np.sum(pseudo_N)
-
-    N2 = (superN / sum_superN) - (pseudo_N / sum_pseudo_N)
+    N2 = (superN / np.sum(superN)) - (pseudo_N / np.sum(pseudo_N))
     falloff = np.arange(1, N2.shape[0]+1).astype(float)**-1
     N2 = N2 * np.tile(falloff, (N2.shape[1], 1)).T
     N2[N2 < np.percentile(N2[N2 > 0], 95)] = 0
@@ -389,7 +421,13 @@ while np.any(~np.any([angle, distance, time], axis=1)):
     C[0] = np.arange(0, settings.DISTANCE_MAX, settings.DISTANCE_BIN_SIZE)
     C[1] = np.arange(-180, 181, settings.DEGREE_BIN_SIZE)
 
-    percentile_value = np.percentile(N2[N2 > 0], 75)
+    # percentile_value = np.percentile(N2[N2 > 0], 75)
+    non_zero_elements = N2[N2 > 0]
+    if len(non_zero_elements) > 0:
+        percentile_value = np.percentile(non_zero_elements, 75)
+    else:
+        percentile_value = 0
+
     N2[N2 < percentile_value] = 0
 
     CC = ndimage.label(N2)
@@ -401,7 +439,6 @@ while np.any(~np.any([angle, distance, time], axis=1)):
         if not set(CC[0][CC[0] == i]).intersection(set(G)):
             N2[CC[0] == i] = 0
 
-    # assuming N2, N3, CC, and idx are already defined as per previous code
     a, b = np.where(N2 > 0)
     if a.size == 0:
         N2 = np.copy(N3)
@@ -424,28 +461,27 @@ while np.any(~np.any([angle, distance, time], axis=1)):
     # FIX THIS LEN TO 36000
 
     distance_bin = 5
-    # assuming tempangle, tempdistance, superN, pseudo_N, nrand1, and storeN are already defined as per previous code
-    # print("entering big IF")
 
     if tempangle.size != 0 and tempdistance is not None:
         storeN = storeN + (superN/np.sum(superN) -
                            pseudo_N/np.sum(pseudo_N))/nrand1
 
         keepitgoing = True
-
-        # print("WHILE in IF")
         while keepitgoing:
-            temp = N2[np.ix_(np.arange(np.where(C[0] == 1)[0][0], np.where(C[0] == tempdistance)[0][0]+1),
-                             np.arange(np.where(C[1] == -tempangle)[0][0], np.where(C[1] == tempangle)[0][0]+1))]
-            tempmean = np.mean(temp)
+            temp = N2[(C[0] == 1).nonzero()[0][0]:(C[0] == tempdistance).nonzero()[0][0],
+                      (C[1] >= -tempangle).nonzero()[0][0]:(C[1] == tempangle).nonzero()[0][0]+1]
+
+            tempmean = temp.mean()
             update = 0
-            # assuming N2, C, tempangle, tempdistance, and angle_bin are already defined as per previous code
-            tempang = N2[np.ix_(np.arange(np.where(C[0] == 1)[0][0], np.where(C[0] == tempdistance)[0][0]+1),
-                                np.arange(np.where(C[1] == -tempangle-angle_bin)[0][0], np.where(C[1] == tempangle+angle_bin)[0][0]+1))]
-            tempdist = N2[np.ix_(np.arange(np.where(C[0] == 1)[0][0], np.where(C[0] == tempdistance+distance_bin)[0][0]+1),
-                                 np.arange(np.where(C[1] == -tempangle)[0][0], np.where(C[1] == tempangle)[0][0]+1))]
-            tempangdist = N2[np.ix_(np.arange(np.where(C[0] == 1)[0][0], np.where(C[0] == tempdistance+distance_bin)[0][0]+1),
-                                    np.arange(np.where(C[1] == -tempangle-angle_bin)[0][0], np.where(C[1] == tempangle+angle_bin)[0][0]+1))]
+
+            tempang = N2[(C[0] == 1).nonzero()[0][0]:(C[0] == tempdistance).nonzero()[0][0],
+                         (C[1] >= -tempangle - angle_bin).nonzero()[0][0]:(C[1] == tempangle + angle_bin).nonzero()[0][0]+1]
+
+            tempdist = N2[(C[0] == 1).nonzero()[0][0]:(C[0] == tempdistance + distance_bin).nonzero()[0][0],
+                          (C[1] >= -tempangle).nonzero()[0][0]:(C[1] == tempangle).nonzero()[0][0]+1]
+
+            tempangdist = N2[(C[0] == 1).nonzero()[0][0]:(C[0] == tempdistance + distance_bin).nonzero()[0][0],
+                             (C[1] >= -tempangle - angle_bin).nonzero()[0][0]:(C[1] == tempangle + angle_bin).nonzero()[0][0]+1]
 
             if np.mean(tempangdist) > np.mean(tempang) and np.mean(tempdist):
                 if np.prod(tempangdist.shape)*meanN2 > np.sum(tempang):
@@ -467,7 +503,6 @@ while np.any(~np.any([angle, distance, time], axis=1)):
             else:
                 keepitgoing = 0
 
-        # print("done WHILE")
         angle[ni] = tempangle
         distance[ni] = tempdistance
 
@@ -475,9 +510,7 @@ while np.any(~np.any([angle, distance, time], axis=1)):
             treatment.values())[i] for i in temp_ind}
 
         tstrain = [None] * len(pick_random_groups)
-        start = 0
-        timecut = 0
-        exptime = 30
+        start, timecut, exptime = 0, 0, 30
 
         for i in range(len(pick_random_groups)):
             key = list(pick_random_groups.keys())[i]
@@ -488,10 +521,16 @@ while np.any(~np.any([angle, distance, time], axis=1)):
             tstrain[i] = fast_flag_interactions(
                 trx, timecut, tempangle, tempdistance, start, exptime, nflies, settings.FPS, 0)
 
-        # TODO: mahybe works faster if replaced list with numpy array
+        # TODO: check if works faster if replaced list with numpy array
+        start_time = time.time()
+
+        # tempangle = 140
+        # tempdistance = 1.250
+        print(tempangle, tempdistance)
         ptstrain = boot_pseudo_times(
             treatment, nrand2, temp_ind, tempangle, tempdistance, start, exptime)
-        # print("RUNING boot_pseudo_times")
+
+        print(time.time()-start_time)
 
         M = np.arange(0, 30*60+0.05, 0.05)
         N = np.zeros((len(ptstrain), len(M)-1))
@@ -504,18 +543,19 @@ while np.any(~np.any([angle, distance, time], axis=1)):
 
         N[np.isnan(N)] = 0
         PN = np.sum(N, axis=0)
-
         N = np.zeros((len(tstrain), len(M)-1))  # (15x36001)
+
         for i in range(len(tstrain)):
-            hist, _ = np.histogram(tstrain[i], bins=M)
-            temps = np.cumsum(hist / np.sum(hist))[::-1]
-            N[i, :] = temps
+            temp = tstrain[i][:-1]
+            temp_hist = np.histogram(temp, bins=M)[0]
+            temps = temp_hist / np.sum(temp_hist)
+            temps_cumsum = np.cumsum(temps[::-1])[::-1]
+            N[i, :] = temps_cumsum
 
         N[np.isnan(N)] = 0
         N = np.sum(N, axis=0)
         temp = N/n - PN/nrand2
         ftemp = np.argmax(temp[0:round(len(M)/2)])
-
         keepgoing = True
 
         try:
@@ -531,25 +571,20 @@ while np.any(~np.any([angle, distance, time], axis=1)):
                     keepgoing = False
 
                 if ftemp >= len(temp):
-                    ftemp = ftemp - 1
+                    ftemp -= 1
                     keepgoing = False
 
             storeT[:, ni] = temp
             ftemp = np.where(N*0.5 < N[ftemp])[0]
 
-            print(len(ftemp))
             if len(ftemp) > 0:
                 ftemp = ftemp[0]
-                time[ni] = M[ftemp]
-                # Save data
-                # np.save("CSf"+'_temp_home.npy',
-                #         [storeT, time, distance, angle])
-                print(str(ni) + "distance " +
-                      str(distance[ni]) + "angle " + str(angle[ni]) + "time " + str(time[ni]))
+                time_arr[ni] = M[ftemp]
+                print(str(ni) + " distance " +
+                      str(distance[ni]) + " angle " + str(angle[ni]) + " time " + str(time_arr[ni]))
 
                 ni += 1
 
-                # tic()
         except Exception as e:
 
             print(e)
@@ -559,7 +594,3 @@ while np.any(~np.any([angle, distance, time], axis=1)):
             distance[ni] = 0
             angle[ni] = 0
             time[ni] = 0
-
-        # print("skiping while")
-
-# %%
