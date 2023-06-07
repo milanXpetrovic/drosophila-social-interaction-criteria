@@ -11,11 +11,14 @@ import json
 import multiprocessing
 
 import numpy as np
-
-import concurrent.futures
+from collections import defaultdict
 
 from scipy import ndimage
+from scipy.ndimage import label
 from scipy.signal import convolve2d
+from scipy.ndimage.filters import gaussian_filter
+
+from skimage import measure
 
 from fly_pipe import settings
 from fly_pipe.utils import fileio
@@ -172,8 +175,8 @@ def pseudo_fast_flag_interactions(
     trx, timecut, minang, bl, start, exptime, nflies, fps, movecut
 ):
     # sorted_keys = natsort.natsorted(trx.keys())
-
     # trx = {k: trx[k] for k in sorted_keys}
+
     start = round(start * 60 * fps + 1)
     timecut = timecut * fps
     m = [1, 41040]
@@ -190,10 +193,6 @@ def pseudo_fast_flag_interactions(
 
     distances = np.zeros((nflies, nflies, m[1]))
     angles = np.zeros((nflies, nflies, m[1]))
-
-    # for fly_name, fly_path in trx.items():
-    #     df = pd.read_csv(fly_path, index_col=0)
-    #     dict_dfs.update({fly_name: df})
 
     dict_dfs = trx
     for i in range(nflies):
@@ -269,24 +268,7 @@ def pseudo_fast_flag_interactions(
     return int_times
 
 
-def calculate_interaction(pi, *args):
-    trx, tempangle, tempdistance, start, exptime, nflies, fps = args
-    return pseudo_fast_flag_interactions(
-        trx, 0, tempangle, tempdistance, start, exptime, nflies, settings.FPS, 0
-    )
-
-
-def boot_pseudo_times(
-    treatment, nrand2, temp_ind, tempangle, tempdistance, start, exptime
-):
-    rand_rot = 1
-    pick_random_groups = {
-        list(treatment.keys())[i]: list(treatment.values())[i] for i in temp_ind
-    }
-
-    normalized_dfs, pxpermm = SL.normalize_random_group(pick_random_groups)
-    nflies = len(normalized_dfs)
-
+def get_trx(normalized_dfs, pxpermm, rand_rot):
     trx = {}
     for fly_key in normalized_dfs:
         fly = normalized_dfs[fly_key]
@@ -312,42 +294,40 @@ def boot_pseudo_times(
             }
             trx.update({fly_key: pd.DataFrame(dict_values)})
 
+    return trx
+
+
+def calculate_interaction(pi, *args):
+    trx, tempangle, tempdistance, start, exptime, nflies, fps = args
+    return pseudo_fast_flag_interactions(
+        trx, 0, tempangle, tempdistance, start, exptime, nflies, settings.FPS, 0
+    )
+
+
+def boot_pseudo_times(
+    treatment, nrand2, temp_ind, tempangle, tempdistance, start, exptime
+):
+    rand_rot = 1
+    pick_random_groups = {
+        list(treatment.keys())[i]: list(treatment.values())[i] for i in temp_ind
+    }
+
+    normalized_dfs, pxpermm = SL.normalize_random_group(pick_random_groups)
+    nflies = len(normalized_dfs)
+
+    list_args = []
+    for pi in range(nrand2):
+        trx = get_trx(normalized_dfs, pxpermm, rand_rot)
+        args = (trx, tempangle, tempdistance, start, exptime, nflies, settings.FPS)
+
+        list_args.append((pi,) + args)
+
     times = [None] * nrand2
-
     pool = multiprocessing.Pool()
-
-    args = (trx, tempangle, tempdistance, start, exptime, nflies, settings.FPS)
-
-    # Parallelize the computation
-    times = pool.starmap(calculate_interaction, [(pi,) + args for pi in range(nrand2)])
+    times = pool.starmap(calculate_interaction, list_args)
 
     pool.close()
     pool.join()
-
-    # for pi in range(nrand2):
-    #     times[pi] = pseudo_fast_flag_interactions(
-    #         trx, 0, tempangle, tempdistance, start, exptime, nflies, settings.FPS, 0
-    # )
-
-    # with concurrent.futures.ProcessPoolExecutor() as executor:
-    #     futures = [
-    #         executor.submit(
-    #             pseudo_fast_flag_interactions,
-    #             trx,
-    #             0,
-    #             tempangle,
-    #             tempdistance,
-    #             start,
-    #             exptime,
-    #             nflies,
-    #             settings.FPS,
-    #             0,
-    #         )
-    #         for _ in range(nrand2)
-    #     ]
-
-    # for pi, future in enumerate(concurrent.futures.as_completed(futures)):
-    #     times[pi] = future.result()
 
     return times
 
@@ -382,7 +362,6 @@ def boot_pseudo_fly_space(treatment, temp_ind):
 
 
 # if __name__ == '__main__':
-
 
 # OUTPUT_PATH = os.path.join(
 #     "../../data/find_edges/0_0_angle_dist_in_group/", settings.TREATMENT)
@@ -435,132 +414,163 @@ sorted_keys = natsort.natsorted(treatment.keys())
 treatment = {k: treatment[k] for k in sorted_keys}
 
 #  np.any(~np.any([angle, distance, time_arr], axis=1))
-start_time = time.time()
-while ni < 500:
+while ni < 50:
+    total_time = time.time()
+    # print("\n")
     print(ni)
-    # temp_ind = random.sample(range(len(treatment)), settings.RANDOM_GROUP_SIZE)
+    temp_ind = random.sample(range(len(treatment)), settings.RANDOM_GROUP_SIZE)
 
-    temp_ind = [11, 16, 17, 14, 22, 18, 8, 1, 9, 15, 6, 24, 4, 20, 3]
-    temp_ind = [x - 1 for x in temp_ind]
+    # temp_ind = [19, 25, 1, 2, 10, 5, 7, 15, 8, 17, 21, 14, 18, 23, 6]
+    # temp_ind = [x - 1 for x in temp_ind]
 
     pick_random_groups = {
         list(treatment.keys())[i]: list(treatment.values())[i] for i in temp_ind
     }
 
-    # all_hists = []
-    # for group_name, group_path in pick_random_groups.items():
-    #     group = fileio.load_files_from_folder(group_path, file_format=".csv")
-    #     normalized_dfs, pxpermm_group = SL.normalize_group(
-    #         group, normalization, pxpermm, group_name
-    #     )
-    #     hist = SL.group_space_angle_hist(normalized_dfs, pxpermm_group)
-    #     all_hists.append(hist)
+    all_hists = []
+    for group_name, group_path in pick_random_groups.items():
+        group = fileio.load_files_from_folder(group_path, file_format=".csv")
+        normalized_dfs, pxpermm_group = SL.normalize_group(
+            group, normalization, pxpermm, group_name
+        )
+        hist = SL.group_space_angle_hist(normalized_dfs, pxpermm_group)
+        all_hists.append(hist)
 
-    # res = np.sum(all_hists, axis=0)
-    # superN = res
+    res = np.sum(all_hists, axis=0)
+    superN = res
 
     # np.save("/home/milky/fly-pipe/fly_pipe/find_edges/superN.npy", superN)
 
-    superN = np.load("/home/milky/fly-pipe/fly_pipe/find_edges/superN.npy")
+    # superN = pseudo_N = np.genfromtxt(
+    #     "/home/milky/fly-pipe/fly_pipe/find_edges/superN.csv",
+    #     delimiter=",",
+    #     dtype=None,
+    # )
     # superN = superN.T
+    # superN = superN[:71, :399]
 
     pseudo_N = boot_pseudo_fly_space(treatment, temp_ind)
-    # print("boot_pseudo_fly_space" + str(time.time() - start_time))
+
+    # pseudo_N = pd.read_csv(")
+    # # print("boot_pseudo_fly_space" + str(time.time() - start_time))
+    # pseudo_N = np.genfromtxt(
+    #     "/home/milky/fly-pipe/fly_pipe/find_edges/pseudoN.csv",
+    #     delimiter=",",
+    #     dtype=None,
+    # )
+    # pseudo_N = pseudo_N.T
+    # pseudo_N = pseudo_N[:71, :399]
 
     N2 = (superN / np.sum(superN)) - (pseudo_N / np.sum(pseudo_N))
     falloff = np.arange(1, N2.shape[0] + 1).astype(float) ** -1
     N2 = N2 * np.tile(falloff, (N2.shape[1], 1)).T
-    N2[N2 < np.percentile(N2[N2 > 0], 95)] = 0
 
-    # Apply Gaussian filter
-    h = np.array([[1, 2, 1], [2, 4, 2], [1, 2, 1]]) / 16.0
-    N2 = convolve2d(N2, h, mode="same")
+    positive_values = N2[N2 > 0]
+    percentile_value = np.percentile(positive_values, 95)
 
-    labeled_array, num_features = ndimage.label(N2)
-    bcenter = np.where(labeled_array == 1)[0][-5:]
+    # Set values in N2 that are less than the 95th percentile of positive values to 0
+    N2[N2 <= percentile_value] = 0
+
     angle_bin = 5
 
-    # Find the index of the first pixel along the second dimension of the connected component with value of -angle_bin*2
-    acenter1_index = np.where(labeled_array[:, int(-2 / angle_bin)] == 2)[0]
-    acenter1 = acenter1_index[0] if len(acenter1_index) > 0 else None
-
-    # Find the index of the first pixel along the second dimension of the connected component with value of angle_bin*2
-    acenter2_index = np.where(labeled_array[:, int(2 / angle_bin)] == 2)[0]
-    acenter2 = acenter2_index[0] if len(acenter2_index) > 0 else None
-
-    test = np.zeros_like(N2)
-    test[bcenter[0] : bcenter[-1], acenter1:acenter2] = 1
-    G = np.where(test != 0)[0]
-
-    # Find connected components in N2
-    labeled_array, num_features = ndimage.label(N2)
-
-    # Loop through all connected components
-    for i in range(1, num_features + 1):
-        # Check if the i-th connected component intersects with G
-        if (
-            np.intersect1d(labeled_array[G], labeled_array[labeled_array == i]).size
-            == 0
-        ):
-            # If not, set the value of the i-th connected component to zero
-            N2[labeled_array == i] = 0
-    # define the maximum distance
     C = {}
     C[0] = np.arange(0, settings.DISTANCE_MAX, settings.DISTANCE_BIN_SIZE)
     C[1] = np.arange(-180, 181, settings.DEGREE_BIN_SIZE)
+    # Apply Gaussian filter
+    h = np.array(
+        [
+            [0.0181, 0.0492, 0.0492, 0.0181],
+            [0.0492, 0.1336, 0.1336, 0.0492],
+            [0.0492, 0.1336, 0.1336, 0.0492],
+            [0.0181, 0.0492, 0.0492, 0.0181],
+        ]
+    )
+    h /= np.sum(h)
+    N2 = convolve2d(N2, h, mode="same")
 
-    # percentile_value = np.percentile(N2[N2 > 0], 75)
-    non_zero_elements = N2[N2 > 0]
-    if len(non_zero_elements) > 0:
-        percentile_value = np.percentile(non_zero_elements, 75)
-    else:
-        percentile_value = 0
+    labeled_image, num_labels = label(N2)
+    pixel_idx_list = [
+        np.where(labeled_image == label_num) for label_num in range(1, num_labels + 1)
+    ]
+    CC = {
+        "Connectivity": 8,
+        "ImageSize": labeled_image.shape,
+        "NumObjects": num_labels,
+        "PixelIdxList": pixel_idx_list,
+    }
 
-    N2[N2 < percentile_value] = 0
+    bcenter = np.where(C[0] < 2)[0][-5:]
+    acenter1 = np.where(C[1] == -angle_bin * 2)[0][0]
+    acenter2 = np.where(C[1] == angle_bin * 2)[0][0]
 
-    CC = ndimage.label(N2)
-    numPixels = np.array(ndimage.sum(N2, CC[0], range(1, CC[1] + 1)))
-    idx = np.where(numPixels < 5)[0]
+    test = np.zeros_like(N2)
+    test[bcenter[0] : bcenter[-1] + 1, acenter1 : acenter2 + 1] = 1
+    G = np.where(test != 0)
+
+    for i in range(CC["NumObjects"]):
+        if np.intersect1d(CC["PixelIdxList"][i], G).size == 0:
+            N2[pixel_idx_list[i]] = 0
+
+    N2[N2 < np.percentile(N2[N2 > 0], 75)] = 0
+
+    labeled_image, num_labels = label(N2)
+    pixel_idx_list = [
+        np.where(labeled_image == label_num) for label_num in range(1, num_labels + 1)
+    ]
+    CC = {
+        "Connectivity": 8,
+        "ImageSize": labeled_image.shape,
+        "NumObjects": num_labels,
+        "PixelIdxList": pixel_idx_list,
+    }
+    num_pixels = np.array([len(pixel_idx[0]) for pixel_idx in pixel_idx_list])
+    idx = np.where(num_pixels < 5)[0]
+
     N3 = np.copy(N2)
 
-    for i in range(1, CC[1] + 1):
-        if not set(CC[0][CC[0] == i]).intersection(set(G)):
-            N2[CC[0] == i] = 0
-    a, b = np.where(N2 > 0)
-    if a.size == 0:
+    for i in range(CC["NumObjects"]):
+        if np.intersect1d(CC["PixelIdxList"][i], G).size == 0:
+            N2[pixel_idx_list[i]] = 0
+
+    a, b = np.where(N2 > 0)  ##66
+
+    if len(a) == 0:
         N2 = np.copy(N3)
         for i in range(len(idx)):
-            N2[CC[0] == idx[i]] = 0
+            N2[CC["PixelIdxList"][idx[i]]] = 0
         a, b = np.where(N2 > 0)
 
-    tempangle = np.max(np.abs(C[1][b]))
-    tempdistance = C[0][np.argmax(a)]
-    keepitgoing = 1
-    n = 15
-    nrand2 = 500
+    tempangle = np.max(np.abs(C[1][b - 1]))
+    tempdistance = C[0][np.max(a - 1)]
+
+    # tempangle = np.int64(85)
+    # tempdistance = np.float64(1.25)
+
+    distance_bin, n = 0.25, 15
+    nrand1, nrand2 = 500, 500
+
     N2 = superN / n - pseudo_N / nrand2
     meanN2 = np.mean(N2)
 
-    nrand1 = 500
     storeN = np.zeros((len(C[0]) - 1, len(C[1]) - 2))
     storeN = storeN.T
+    # storeN = np.zeros((len(C[0]) + 1, len(C[1])))
     storeT = np.zeros((len(np.arange(0, 30 * 60, 0.05)), nrand1))
-    # FIX THIS LEN TO 36000
 
-    distance_bin = 5
-
+    keepitgoing = True
     if tempangle.size != 0 and tempdistance is not None:
         storeN = (
             storeN + (superN / np.sum(superN) - pseudo_N / np.sum(pseudo_N)) / nrand1
         )
 
-        keepitgoing = True
         while keepitgoing:
+            # temp = N2[
+            #     (C[0] == 1).nonzero()[0][0] : (C[0] == tempdistance).nonzero()[0][0],
+            #     (C[1] >= -tempangle).nonzero()[0][0] : (C[1] == tempangle).nonzero()[0][0] + 1,
+            # ]
             temp = N2[
-                (C[0] == 1).nonzero()[0][0] : (C[0] == tempdistance).nonzero()[0][0],
-                (C[1] >= -tempangle)
-                .nonzero()[0][0] : (C[1] == tempangle)
-                .nonzero()[0][0]
+                np.where(C[0] == 1)[0][0] : np.where(C[0] == tempdistance)[0][0] + 1,
+                np.where(C[1] == -tempangle)[0][0] : np.where(C[1] == tempangle)[0][0]
                 + 1,
             ]
 
@@ -568,70 +578,79 @@ while ni < 500:
             update = 0
 
             tempang = N2[
-                (C[0] == 1).nonzero()[0][0] : (C[0] == tempdistance).nonzero()[0][0],
-                (C[1] >= -tempangle - angle_bin)
-                .nonzero()[0][0] : (C[1] == tempangle + angle_bin)
-                .nonzero()[0][0]
+                np.where((C[0] == 1) | (C[0] == tempdistance))[0][0] : np.where(
+                    C[0] == tempdistance
+                )[0][0]
+                + 1,
+                np.where(
+                    (C[1] >= -tempangle - angle_bin) & (C[1] <= tempangle + angle_bin)
+                )[0][0] : np.where(
+                    (C[1] >= -tempangle - angle_bin) & (C[1] <= tempangle + angle_bin)
+                )[
+                    0
+                ][
+                    -1
+                ]
                 + 1,
             ]
-
+            # tempdist=((N2(find(C{1}==1):find(C{1}==tempdistance+distance_bin),find(C{2}==-tempangle):find(C{2}==tempangle))));
             tempdist = N2[
-                (C[0] == 1)
-                .nonzero()[0][0] : (C[0] == tempdistance + distance_bin)
-                .nonzero()[0][0],
-                (C[1] >= -tempangle)
-                .nonzero()[0][0] : (C[1] == tempangle)
-                .nonzero()[0][0]
+                np.where((C[0] == 1))[0][0] : np.where(
+                    (C[0] == tempdistance + distance_bin)
+                )[0][0]
+                + 1,
+                np.where((C[1] == -tempangle))[0][0] : np.where((C[1] == tempangle))[0][
+                    0
+                ]
                 + 1,
             ]
 
             tempangdist = N2[
-                (C[0] == 1)
-                .nonzero()[0][0] : (C[0] == tempdistance + distance_bin)
-                .nonzero()[0][0],
-                (C[1] >= -tempangle - angle_bin)
-                .nonzero()[0][0] : (C[1] == tempangle + angle_bin)
-                .nonzero()[0][0]
+                np.where((C[0] == 1))[0][0] : np.where(
+                    (C[0] == tempdistance + distance_bin)
+                )[0][0]
+                + 1,
+                np.where((C[1] == -tempangle - angle_bin))[0][0] : np.where(
+                    (C[1] == tempangle + angle_bin)
+                )[0][0]
                 + 1,
             ]
 
             if np.mean(tempangdist) > np.mean(tempang) and np.mean(tempdist):
                 if np.prod(tempangdist.shape) * meanN2 > np.sum(tempang):
                     update = 3
+                    tempangle = tempangle + angle_bin
+                    tempdistance = tempdistance + distance_bin
+
             elif np.mean(tempang) > np.mean(tempdist):
                 if (
                     np.prod(tempang.shape) * meanN2 > np.sum(tempang)
                     and np.mean(tempang) > tempmean
                 ):
                     update = 1
+                    tempangle = tempangle + angle_bin
             else:
                 if (
                     np.prod(tempang.shape) * meanN2 < np.sum(tempdist)
                     and np.mean(tempdist) > tempmean
                 ):
                     update = 2
+                    tempdistance = tempdistance + distance_bin
 
-            if update == 1:
-                tempangle = tempangle + angle_bin
-            elif update == 2:
-                tempdistance = tempdistance + distance_bin
-            elif update == 3:
-                tempangle = tempangle + angle_bin
-                tempdistance = tempdistance + distance_bin
-            else:
+            if update not in [1, 2, 3]:
                 keepitgoing = 0
 
         angle[ni] = tempangle
         distance[ni] = tempdistance
 
+        ## Time
         pick_random_groups = {
             list(treatment.keys())[i]: list(treatment.values())[i] for i in temp_ind
         }
-
         tstrain = [None] * len(pick_random_groups)
         start, timecut, exptime = 0, 0, 30
         start_time = time.time()
-        TODO: FIX THIS
+        ## TODO: FIX THIS
         for i in range(len(pick_random_groups)):
             key = list(pick_random_groups.keys())[i]
             group_path = pick_random_groups[key]
@@ -650,50 +669,50 @@ while ni < 500:
                 0,
             )
 
-        print("next part before boot_pseudo_times" + str(time.time() - start_time))
         # TODO: check if works faster if replaced list with numpy array
         start_time = time.time()
 
-        # tempangle = 140
-        # tempdistance = 1.250
-        print(tempangle, tempdistance)
         ptstrain = boot_pseudo_times(
             treatment, nrand2, temp_ind, tempangle, tempdistance, start, exptime
         )
-        print(time.time() - start_time)
+        # print("boot_pseudo_times", time.time() - start_time)
 
         M = np.arange(0, 30 * 60 + 0.05, 0.05)
         N = np.zeros((len(ptstrain), len(M) - 1))
 
         for i in range(len(ptstrain)):
-            temp = np.histogram(ptstrain[i], bins=M)[0]
+            temp = ptstrain[i][:-1]
+            temp = np.histogram(temp, bins=M)[0]
             temps = temp / np.sum(temp)
             temps = np.cumsum(temps[::-1])[::-1]
             N[i, :] = temps
 
         N[np.isnan(N)] = 0
+
         PN = np.sum(N, axis=0)
-        N = np.zeros((len(tstrain), len(M) - 1))  # (15x36001)
+        N = np.zeros((len(tstrain), len(M) - 1))
 
         for i in range(len(tstrain)):
             temp = tstrain[i][:-1]
-            temp_hist = np.histogram(temp, bins=M)[0]
-            temps = temp_hist / np.sum(temp_hist)
-            temps_cumsum = np.cumsum(temps[::-1])[::-1]
-            N[i, :] = temps_cumsum
+            temp = np.histogram(temp, bins=M)[0]
+            temps = temp / np.sum(temp)
+            temps = np.cumsum(temps[::-1])[::-1]
+            N[i, :] = temps
 
         N[np.isnan(N)] = 0
         N = np.sum(N, axis=0)
-        temp = N / n - PN / nrand2
-        ftemp = np.argmax(temp[0 : round(len(M) / 2)])
+
+        temp = (N / n) - (PN / nrand2)
+        ftemp = np.where(temp == np.max(temp[: round(len(M) / 2)]))[0][0]
+        # ftemp = np.argmax(temp[0 : round(len(M) / 2)])
         keepgoing = True
 
         try:
             keepgoing = True
 
             while keepgoing:
-                curmean = np.mean(temp[0:ftemp])
-                posmean = np.mean(temp[0 : ftemp + 1])
+                curmean = np.mean(temp[:ftemp])
+                posmean = np.mean(temp[: ftemp + 1])
 
                 if curmean < posmean:
                     ftemp += 1
@@ -705,26 +724,27 @@ while ni < 500:
                     keepgoing = False
 
             storeT[:, ni] = temp
+            ftemp_coppy = ftemp
             ftemp = np.where(N * 0.5 < N[ftemp])[0]
 
-            if len(ftemp) > 0:
+            if len(ftemp) > 0 and ftemp[0] != 0:
                 ftemp = ftemp[0]
                 time_arr[ni] = M[ftemp]
                 print(
-                    str(ni)
-                    + " distance "
-                    + str(distance[ni])
-                    + " angle "
-                    + str(angle[ni])
-                    + " time "
-                    + str(time_arr[ni])
+                    f"{ni} distance {distance[ni]} angle {angle[ni]} time {time_arr[ni]}"
                 )
+                with open("output2.txt", "a") as file:
+                    file.write(
+                        f"{ni} distance {distance[ni]} angle {angle[ni]} time {time_arr[ni]}"
+                    )
+                    file.write("\n")
+                    file.write("TOTAL TIME: " + str(time.time() - total_time))
+                    file.write("\n")
 
                 ni += 1
 
         except Exception as e:
             print(e)
-            # Could not find a good time estimate, so scrap this iteration
             storeN = (
                 storeN
                 - (superN / np.sum(superN) - pseudo_N / np.sum(pseudo_N)) / nrand1
