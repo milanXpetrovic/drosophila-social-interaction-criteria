@@ -9,10 +9,12 @@ import sys
 import time
 import json
 import multiprocessing
+import scipy
 
 import numpy as np
 from collections import defaultdict
 
+from scipy.io import savemat
 from scipy.ndimage import label
 from scipy.signal import convolve2d
 from scipy.signal import find_peaks
@@ -303,8 +305,8 @@ def boot_pseudo_times(treatment, nrand2, temp_ind, tempangle, tempdistance, star
 
 def pseudo_group_space_angle_hist(normalized_dfs, pxpermm):
     """ """
-    degree_bins = np.arange(-177.5, 177.6, settings.DEGREE_BIN_SIZE)
-    distance_bins = np.arange(0.125, 99.8751, settings.DISTANCE_BIN_SIZE)
+    degree_bins = np.arange(-177.5, 177.6, settings.ANGLE_BIN)
+    distance_bins = np.arange(0.125, 99.8751, settings.DISTANCE_BIN)
     total = np.zeros((len(degree_bins) + 1, len(distance_bins) - 1))
 
     for fly1_key, fly2_key in list(itertools.permutations(normalized_dfs.keys(), 2)):
@@ -442,12 +444,23 @@ sorted_keys = natsort.natsorted(treatment.keys())
 treatment = {k: treatment[k] for k in sorted_keys}
 
 #  np.any(~np.any([angle, distance, time_arr], axis=1))
-N2_list = []
-angle_bin = 5
+
+angle_bin = settings.ANGLE_BIN
+distance_bin = settings.DISTANCE_BIN
+start = settings.START
+timecut = settings.TIMECUT
+exptime = settings.EXP_DURATION
+n = settings.RANDOM_GROUP_SIZE
+nrand1 = settings.N_RANDOM_1
+nrand2 = settings.N_RANDOM_2
+
+df = pd.DataFrame(columns=["distance", "angle", "time"])
 while ni < 500:
     ## USE THIS FOR DEBUGG
-    # temp_ind = [11, 14, 3, 23, 21, 17, 1, 25, 19, 13, 10, 24, 20, 18, 16]
     # temp_ind = [x - 1 for x in temp_ind]
+    temp_ind = [21, 20, 24, 2, 23, 7, 22, 13, 17, 18, 1, 9, 14, 10, 3]
+    superN = scipy.io.loadmat("superNpy2.mat")
+    pseudo_N = scipy.io.loadmat("pseudoNpy2.mat")
     # superN = pd.read_csv("/home/milky/fly-pipe/fly_pipe/find_edges/superN.csv", header=None)
     # superN = superN.to_numpy()
     # pseudo_N = pd.read_csv("/home/milky/fly-pipe/fly_pipe/find_edges/pseudoN.csv", header=None)
@@ -473,8 +486,8 @@ while ni < 500:
     N2[N2 <= np.percentile(N2[N2 > 0], 95)] = 0
 
     C = {}
-    C[0] = np.arange(0, settings.DISTANCE_MAX, settings.DISTANCE_BIN_SIZE)
-    C[1] = np.arange(-180, 181, settings.DEGREE_BIN_SIZE)
+    C[0] = np.arange(0, settings.DISTANCE_MAX, settings.DISTANCE_BIN)
+    C[1] = np.arange(-180, 181, settings.ANGLE_BIN)
 
     a, b = np.where(N2 > 0)
     tempangle = np.max(np.abs(C[1][b - 1]))
@@ -494,7 +507,6 @@ while ni < 500:
     N2_int = np.where(N2 > 0, 1, N2)
     labeled_image, num_labels = skimage_label.label(N2_int, connectivity=2, return_num=True)
     pixel_idx_list = [np.where(labeled_image == label_num) for label_num in range(1, num_labels + 1)]
-
     CC = {
         "Connectivity": 8,
         "ImageSize": labeled_image.shape,
@@ -523,11 +535,9 @@ while ni < 500:
         continue
 
     N2[N2 < np.percentile(N2[N2 > 0], 75)] = 0
-
     N2_int = np.where(N2 > 0, 1, N2)
     labeled_image, num_labels = skimage_label.label(N2_int, connectivity=2, return_num=True)
     pixel_idx_list = [np.where(labeled_image == label_num) for label_num in range(1, num_labels + 1)]
-
     CC = {
         "Connectivity": 8,
         "ImageSize": labeled_image.shape,
@@ -555,10 +565,11 @@ while ni < 500:
             N2[CC["PixelIdxList"][idx[i]]] = 0
         a, b = np.where(N2 > 0)
 
+    if not len(a) or not len(b):
+        continue
+
     tempangle = np.max(np.abs(C[1][b]))
-    tempdistance = C[0][np.max(a) - 1]
-    distance_bin, n = 0.25, 15
-    nrand1, nrand2 = 500, 500
+    tempdistance = C[0][np.max(a)]
 
     N2 = superN / n - pseudo_N / nrand2
     meanN2 = np.mean(N2)
@@ -618,13 +629,11 @@ while ni < 500:
         angle[ni] = tempangle
         distance[ni] = tempdistance
 
-        print(tempangle, tempdistance)
-
         ## Time
         pick_random_groups = {list(treatment.keys())[i]: list(treatment.values())[i] for i in temp_ind}
         tstrain = [None] * len(pick_random_groups)
-        start, timecut, exptime = 0, 0, 30
-        start_time = time.time()
+
+        # start_time = time.time()
 
         ## TODO: FIX THIS
         for i in range(len(pick_random_groups)):
@@ -704,11 +713,16 @@ while ni < 500:
                 time_arr[ni] = M[ftemp]
                 print(f"{ni} distance {distance[ni]} angle {angle[ni]} time {time_arr[ni]}")
                 with open("output.txt", "a") as file:
-                    file.write(f"{ni} distance {distance[ni]} angle {angle[ni]} time {time_arr[ni]}")
-                    file.write("\n")
-                    file.write("TOTAL TIME: " + str(time.time() - total_time))
-                    file.write("\n")
+                    d = {"distance": distance[ni][0], "angle": angle[ni][0], "time": time_arr[ni][0]}
+                    df = df.append(d, ignore_index=True)
+                    df.to_csv(f"{settings.TREATMENT}_criteria.csv")
+                    file.write(f"{ni}: {time.time() - total_time} \n")
 
+                if time_arr[ni][0] > 2:
+                    savemat("pseudoNpy2.mat", {"data": pseudo_N})
+                    savemat("superNpy2.mat", {"data": superN})
+                    file.write(str(temp_ind))
+                    sys.exit()
                 ni += 1
 
         except Exception as e:
@@ -716,4 +730,4 @@ while ni < 500:
             storeN = storeN - (superN / np.sum(superN) - pseudo_N / np.sum(pseudo_N)) / nrand1
             distance[ni] = 0
             angle[ni] = 0
-            time[ni] = 0
+            time_arr[ni] = 0
