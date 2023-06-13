@@ -283,11 +283,10 @@ def boot_pseudo_times(treatment, nrand2, temp_ind, tempangle, tempdistance, star
     rand_rot = 1
     pick_random_groups = {list(treatment.keys())[i]: list(treatment.values())[i] for i in temp_ind}
 
-    normalized_dfs, pxpermm = SL.normalize_random_group(pick_random_groups)
-    nflies = len(normalized_dfs)
-
     list_args = []
     for pi in range(nrand2):
+        normalized_dfs, pxpermm = SL.normalize_random_group(pick_random_groups)
+        nflies = len(normalized_dfs)
         trx = get_trx(normalized_dfs, pxpermm, rand_rot)
         args = (trx, tempangle, tempdistance, start, exptime, nflies, settings.FPS)
 
@@ -368,6 +367,7 @@ def pseudo_group_space_angle_hist(normalized_dfs, pxpermm):
 
 def process_iteration(pick_random_groups):
     normalized_dfs, pxpermm_dict = SL.normalize_random_group(pick_random_groups)
+
     N = pseudo_group_space_angle_hist(normalized_dfs, pxpermm_dict)
     return N
 
@@ -389,6 +389,22 @@ def boot_pseudo_fly_space(treatment, temp_ind):
     pool.join()
 
     return np.sum(superN, axis=0)
+
+
+def process_group(group_path):
+    trx = fileio.load_files_from_folder(group_path, file_format=".csv")
+    nflies = len(trx)
+    return fast_flag_interactions(
+        trx,
+        timecut,
+        tempangle,
+        tempdistance,
+        start,
+        exptime,
+        nflies,
+        settings.FPS,
+        0,
+    )
 
 
 # if __name__ == '__main__':
@@ -458,9 +474,11 @@ df = pd.DataFrame(columns=["distance", "angle", "time"])
 while ni < 500:
     ## USE THIS FOR DEBUGG
     # temp_ind = [x - 1 for x in temp_ind]
-    temp_ind = [21, 20, 24, 2, 23, 7, 22, 13, 17, 18, 1, 9, 14, 10, 3]
-    superN = scipy.io.loadmat("superNpy2.mat")
-    pseudo_N = scipy.io.loadmat("pseudoNpy2.mat")
+    # temp_ind = [21, 20, 24, 2, 23, 7, 22, 13, 17, 18, 1, 9, 14, 10, 3]
+    # superN = scipy.io.loadmat("/home/milky/fly-pipe/fly_pipe/find_edges/superNpy.mat")
+    # superN = superN["data"]
+    # pseudo_N = scipy.io.loadmat("/home/milky/fly-pipe/fly_pipe/find_edges/pseudoNpy.mat")
+    # pseudo_N = pseudo_N["data"]
     # superN = pd.read_csv("/home/milky/fly-pipe/fly_pipe/find_edges/superN.csv", header=None)
     # superN = superN.to_numpy()
     # pseudo_N = pd.read_csv("/home/milky/fly-pipe/fly_pipe/find_edges/pseudoN.csv", header=None)
@@ -631,33 +649,15 @@ while ni < 500:
 
         ## Time
         pick_random_groups = {list(treatment.keys())[i]: list(treatment.values())[i] for i in temp_ind}
-        tstrain = [None] * len(pick_random_groups)
 
-        # start_time = time.time()
+        pool = multiprocessing.Pool()
+        results = pool.map(process_group, pick_random_groups.values())
+        tstrain = list(results)
+        pool.close()
+        pool.join()
 
-        ## TODO: FIX THIS
-        for i in range(len(pick_random_groups)):
-            key = list(pick_random_groups.keys())[i]
-            group_path = pick_random_groups[key]
-            trx = fileio.load_files_from_folder(group_path, file_format=".csv")
-            nflies = len(trx)
-
-            tstrain[i] = fast_flag_interactions(
-                trx,
-                timecut,
-                tempangle,
-                tempdistance,
-                start,
-                exptime,
-                nflies,
-                settings.FPS,
-                0,
-            )
-
-        # TODO: check if works faster if replaced list with numpy array
         # start_time = time.time()
         ptstrain = boot_pseudo_times(treatment, nrand2, temp_ind, tempangle, tempdistance, start, exptime)
-        # print("boot_pseudo_times", time.time() - start_time)
 
         M = np.arange(0, 30 * 60 + 0.05, 0.05)
         N = np.zeros((len(ptstrain), len(M) - 1))
@@ -712,6 +712,7 @@ while ni < 500:
                 ftemp = ftemp[0]
                 time_arr[ni] = M[ftemp]
                 print(f"{ni} distance {distance[ni]} angle {angle[ni]} time {time_arr[ni]}")
+                sys.exit()
                 with open("output.txt", "a") as file:
                     d = {"distance": distance[ni][0], "angle": angle[ni][0], "time": time_arr[ni][0]}
                     df = df.append(d, ignore_index=True)
