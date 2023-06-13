@@ -1,3 +1,12 @@
+## [0.2.2](https://github.com/milanXpetrovic/fly-pipe/compare/v0.2.1...v0.2.2) (2023-06-13)
+
+
+### Performance Improvements
+
+* replaced for loop with multiproc ([84ed187](https://github.com/milanXpetrovic/fly-pipe/commit/84ed187bbefd286552f4e7f95854d5a8eded4f5d))
+
+
+
 ## [0.2.1](https://github.com/milanXpetrovic/fly-pipe/compare/v0.2.0...v0.2.1) (2023-05-02)
 
 
@@ -59,17 +68,6 @@
 ### Performance Improvements
 
 * add dump context ([b892d99](https://github.com/milanXpetrovic/fly-pipe/commit/b892d99fa3a42cd7d3e71c77d2204a4aef8b8e71))
-
-
-
-## [0.0.1](https://github.com/milanXpetrovic/fly-pipe/compare/95b48f3e3076139cf4fc95fe9c92fba6b46a184f...v0.0.1) (2023-02-17)
-
-
-### Bug Fixes
-
-* new code added ([ac34c7a](https://github.com/milanXpetrovic/fly-pipe/commit/ac34c7ac39d6b3d6dd9505a4083509c16a569e8e))
-* new code added ([95b48f3](https://github.com/milanXpetrovic/fly-pipe/commit/95b48f3e3076139cf4fc95fe9c92fba6b46a184f))
-* update ([b1ca3a0](https://github.com/milanXpetrovic/fly-pipe/commit/b1ca3a0cac85eff68de6914e78ae3256a1c23ee3))
 
 
 
