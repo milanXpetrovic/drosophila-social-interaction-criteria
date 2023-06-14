@@ -1,6 +1,8 @@
 # Drosophila automated social interaction criteria
 
-Python implementation of algorithm from: [Automated identification of social interaction criteria in Drosophila melanogaster](https://royalsocietypublishing.org/doi/full/10.1098/rsbl.2014.0749)
+This repo is Python implementation of algorithm from: [Automated identification of social interaction criteria in Drosophila melanogaster](https://royalsocietypublishing.org/doi/full/10.1098/rsbl.2014.0749)
+
+This is still in develoipment phase.
 
 ## Citaiton
 
