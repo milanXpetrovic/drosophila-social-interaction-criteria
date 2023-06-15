@@ -1,24 +1,22 @@
-# Pipeline: ToDo
+# Drosophila automated social interaction criteria
 
-- [ ] dev env
+This repo is Python implementation of algorithm from: [Automated identification of social interaction criteria in Drosophila melanogaster](https://royalsocietypublishing.org/doi/full/10.1098/rsbl.2014.0749)
 
-## Fixes
+This is still in develoipment phase.
 
-- [ ] fix paths in settings.py
-- [ ] fix plot_heatmap foo
+## Citaiton
 
-## Feats
+If you find this code useful, you can cite this work:
 
-- [ ] .mat tracks reader compatible with python scripts
-- [ ] converter from .mat to .csv
-- [ ] normalization file generation
-- [ ] enable and disable paralelization with settings
-
-## Data checks
-
-- [ ] Check if there is normalization file
-- [ ] Check if exp has at least n minuites
-
-## Chore
-
-- move functions from 0_0_angle_dist_in_group.py to utils
+```
+@article{schneider2014automated,
+  title={Automated identification of social interaction criteria in Drosophila melanogaster},
+  author={Schneider, J and Levine, JD},
+  journal={Biology letters},
+  volume={10},
+  number={10},
+  pages={20140749},
+  year={2014},
+  publisher={The Royal Society}
+}
+```
