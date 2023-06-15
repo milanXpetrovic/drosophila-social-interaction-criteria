@@ -19,8 +19,8 @@ N_RANDOM_2 = 500
 MOVECUT = True
 
 # Paths
-# ROOT_DIR = os.path.dirname(os.path.dirname(__file__))
-ROOT_DIR = "/home/milky/fly-pipe"
+ROOT_DIR = os.path.dirname(os.path.dirname(__file__))
+# ROOT_DIR = "/home/milky/droso-social-interaction-criteria"
 LOGS_DIR = os.path.join(ROOT_DIR, "logs")
 
 # Input files
