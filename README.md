@@ -4,7 +4,7 @@ This repo is Python implementation of algorithm from: [Automated identification 
 
 This is still in develoipment phase.
 
-## Citaiton
+## Citation
 
 If you find this code useful, you can cite this work:
 
