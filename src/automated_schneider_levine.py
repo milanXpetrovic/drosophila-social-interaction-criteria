@@ -2,13 +2,8 @@
 import itertools
 import json
 import multiprocessing
-import os
 import random
-import sys
-from collections import defaultdict
-from typing import Dict, Tuple
 
-import matplotlib.pyplot as plt
 import natsort
 import numpy as np
 import pandas as pd
@@ -17,28 +12,27 @@ from scipy.signal import find_peaks
 import src.fileio as fileio
 from src import settings
 
+# def random_pick_groups(treatment: Dict[str, str]) -> Dict[str, str]:
+#     """Randomly picks n groups from treatment."""
 
-def random_pick_groups(treatment: Dict[str, str]) -> Dict[str, str]:
-    """Randomly picks n groups from treatment."""
+#     if len(treatment) < settings.RANDOM_GROUP_SIZE:
+#         sys.exit(
+#             f"Not enough groups in treatment!\nTrying to pick {settings.RANDOM_GROUP_SIZE} from {len(treatment)} treatments"
+#         )
 
-    if len(treatment) < settings.RANDOM_GROUP_SIZE:
-        sys.exit(
-            f"Not enough groups in treatment!\nTrying to pick {settings.RANDOM_GROUP_SIZE} from {len(treatment)} treatments"
-        )
+#     picked_groups = random.sample(range(len(treatment)), settings.RANDOM_GROUP_SIZE)
+#     picked_groups.sort()
 
-    picked_groups = random.sample(range(len(treatment)), settings.RANDOM_GROUP_SIZE)
-    picked_groups.sort()
+#     random_pick = {}
+#     for group_i in picked_groups:
+#         group_name, group_path = list(treatment.items())[group_i]
 
-    random_pick = {}
-    for group_i in picked_groups:
-        group_name, group_path = list(treatment.items())[group_i]
+#         # group = fileio.load_files_from_folder(group_path, file_format='.csv')
+#         # fly_path = random.choice(list(group.keys()))
 
-        # group = fileio.load_files_from_folder(group_path, file_format='.csv')
-        # fly_path = random.choice(list(group.keys()))
+#         random_pick.update({group_name: group_path})
 
-        random_pick.update({group_name: group_path})
-
-    return random_pick
+#     return random_pick
 
 
 def angledifference_nd(angle1, angle2):
@@ -87,12 +81,7 @@ def normalize_random_group(pick_random_groups):
     return normalized_dfs, pxpermm_dict
 
 
-def normalize_group(
-    group: Dict[str, str],
-    normalization: Dict[str, Dict[str, float]],
-    pxpermm: Dict[str, float],
-    group_name: str = "random",
-) -> Tuple[Dict[str, pd.DataFrame], Dict[str, float]]:
+def normalize_group(group, normalization, pxpermm, group_name):
     normalized_dfs = {}
     pxpermm_dict = {}
 
@@ -118,7 +107,7 @@ def normalize_group(
     return (normalized_dfs, pxpermm_dict)
 
 
-def group_space_angle_hist(normalized_dfs: Dict[str, pd.DataFrame], pxpermm: Dict[str, float]) -> np.ndarray:
+def group_space_angle_hist(normalized_dfs, pxpermm):
     """Calculate and return a 2D histogram of the angular and distance differences between pairs of flies based on their positions, using normalized dataframes.
 
     Args:
@@ -198,52 +187,25 @@ def calculate_N(random_group):
 def boot_pseudo_fly_space(treatment, temp_ind):
     pick_random_groups = {list(treatment.keys())[i]: list(treatment.values())[i] for i in temp_ind}
 
-    superN = []
-    # TODO: add multiprocessing here!
-    for _ in range(len(pick_random_groups)):
-        normalized_dfs, pxpermm_dict = normalize_random_group(pick_random_groups)
-        N = group_space_angle_hist(normalized_dfs, pxpermm_dict)
-        superN.append(N)
 
-    N = np.sum(superN, axis=0)
+    ## TODO: remove old commennted code
+    # superN = []
+    # # TODO: add multiprocessing here!
+    # for _ in range(len(pick_random_groups)):
+    #     normalized_dfs, pxpermm_dict = normalize_random_group(pick_random_groups)
+    #     N = group_space_angle_hist(normalized_dfs, pxpermm_dict)
+    #     superN.append(N)
 
-    pool = multiprocessing.Pool()  # Use default number of processes
+    # N = np.sum(superN, axis=0)
 
-    # Parallelize the computation
+    pool = multiprocessing.Pool() 
     superN = pool.map(calculate_N, pick_random_groups)
-
-    pool.close()  # Close the pool
-    pool.join()  # Wait for all processes to finish
+    pool.close()  
+    pool.join()
 
     N = np.sum(superN, axis=0)
 
     return N
-
-
-def plot_heatmap(histogram):
-    """
-    Need to fix this foo.
-    add code that calculates MAX_DIST
-    """
-
-    degree_bins = np.linspace(-180, 180, 71)
-    distance_bins = np.linspace(0, 6, 24)
-    fig, ax = plt.subplots(figsize=(8, 8), subplot_kw={"polar": True})
-    img = ax.pcolormesh(np.radians(degree_bins), distance_bins, histogram, cmap="jet")
-    ax.set_rgrids(np.arange(0, 6.251, 1.0), angle=0)
-    ax.grid(True)
-    plt.title("")
-    plt.tight_layout()
-    plt.show()
-
-
-def one_run_random(tuple_args):
-    treatment, normalization, pxpermm = tuple_args
-
-    random_group = pick_random_group(treatment)
-    normalized_dfs, pxpermm = normalize_group(random_group, normalization, pxpermm)
-    hist_np = group_space_angle_hist(normalized_dfs, pxpermm)
-    return hist_np
 
 
 def fast_flag_interactions(trx, timecut, minang, bl, start, exptime, nflies, fps, movecut):
@@ -490,21 +452,23 @@ def calculate_interaction(pi, *args):
     return pseudo_fast_flag_interactions(trx, 0, tempangle, tempdistance, start, exptime, nflies, settings.FPS, 0)
 
 
+def normalize_random_group_iteration(pi, pick_random_groups, rand_rot, tempangle, tempdistance, start, exptime, fps):
+    normalized_dfs, pxpermm = normalize_random_group(pick_random_groups)
+    nflies = len(normalized_dfs)
+    trx = get_trx(normalized_dfs, pxpermm, rand_rot)
+    args = (trx, tempangle, tempdistance, start, exptime, nflies, fps)
+    return (pi,) + args
+
+
 def boot_pseudo_times(treatment, nrand2, temp_ind, tempangle, tempdistance, start, exptime):
     rand_rot = 1
     pick_random_groups = {list(treatment.keys())[i]: list(treatment.values())[i] for i in temp_ind}
 
-    list_args = []
-    for pi in range(nrand2):
-        normalized_dfs, pxpermm = normalize_random_group(pick_random_groups)
-        nflies = len(normalized_dfs)
-        trx = get_trx(normalized_dfs, pxpermm, rand_rot)
-        args = (trx, tempangle, tempdistance, start, exptime, nflies, settings.FPS)
-
-        list_args.append((pi,) + args)
-
-    times = [None] * nrand2
     pool = multiprocessing.Pool()
+
+    args_list = [(pi, pick_random_groups, rand_rot, tempangle, tempdistance, start, exptime, settings.FPS) for pi in range(nrand2)]
+    list_args = pool.starmap(normalize_random_group_iteration, args_list)
+    times = [None] * nrand2
     times = pool.starmap(calculate_interaction, list_args)
 
     pool.close()
