@@ -1,6 +1,7 @@
 #my files
 data/find_edges/
 data/input/trackings/
+data/*
 .vscode/
 
 # Byte-compiled / optimized / DLL files

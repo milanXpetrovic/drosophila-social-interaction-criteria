@@ -1,0 +1,17 @@
+## thsi is test config file not yet used in main code
+TREATMENT = "CSf"
+
+FPS = 24 #22.8
+START = 0
+END = 20
+EXP_DURATION = 20
+TIMECUT = 0
+
+ANGLE_BIN = 5
+DISTANCE_BIN = 0.25
+DISTANCE_MAX = 100
+
+RANDOM_GROUP_SIZE = 15
+N_RANDOM_1 = 500
+N_RANDOM_2 = 500
+

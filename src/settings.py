@@ -2,10 +2,10 @@ import os
 
 TREATMENT = "CSf"
 
-FPS = 22.8
+FPS = 22.8 
 START = 0
-END = 30
-EXP_DURATION = 30
+END = 20
+EXP_DURATION = 20
 TIMECUT = 0
 
 ANGLE_BIN = 5
@@ -20,7 +20,6 @@ MOVECUT = True
 
 # Paths
 ROOT_DIR = os.path.dirname(os.path.dirname(__file__))
-# ROOT_DIR = "/home/milky/droso-social-interaction-criteria"
 LOGS_DIR = os.path.join(ROOT_DIR, "logs")
 
 # Input files
