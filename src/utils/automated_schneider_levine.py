@@ -2,6 +2,7 @@ import itertools
 import json
 import multiprocessing
 import random
+import time
 
 import natsort
 import numpy as np
@@ -15,70 +16,93 @@ from src import settings
 def angledifference_nd(angle1, angle2):
     """Calculates the difference between two angles in degrees."""
 
-    difference = angle2 - angle1
-    adjustlow = difference < -180
-    adjusthigh = difference > 180
+    diff = angle2 - angle1
+    adjustlow, adjusthigh = diff < -180, diff > 180
     while any(adjustlow) or any(adjusthigh):
-        difference[adjustlow] = difference[adjustlow] + 360
-        difference[adjusthigh] = difference[adjusthigh] - 360
-        adjustlow = difference < -180
-        adjusthigh = difference > 180
+        diff[adjustlow], diff[adjusthigh] = diff[adjustlow] + 360, diff[adjusthigh] - 360
+        adjustlow, adjusthigh = diff < -180, diff > 180
 
-    return difference
+    return diff
 
 
-def normalize_random_group(pick_random_groups):
-    """
-    #TODO: write docstring
-    """
+def rotation(input_XY, center, anti_clockwise_angle):
+    """Rotates the input_XY coordinates by a given angle about a center."""
+    degree = 1  # for radians use degree=0
+    r, c = input_XY.shape
+
+    if input_XY.shape[1] != 2: raise ValueError("Not enough columns in coordinates XY")
+    
+    r, c = len(center), len([center[0]])
+    if (r != 1 and c == 2) or (r == 1 and c != 2): raise ValueError('Error in the size of the "center" matrix')
+    
+    center_coord = input_XY.copy()
+    center_coord[:, 0], center_coord[:, 1] = center[0], center[1]
+    anti_clockwise_angle = -1 * anti_clockwise_angle
+    
+    if degree == 1: anti_clockwise_angle = np.deg2rad(anti_clockwise_angle)
+    rotation_matrix = np.array([[np.cos(anti_clockwise_angle), -np.sin(anti_clockwise_angle)],
+                                [np.sin(anti_clockwise_angle), np.cos(anti_clockwise_angle)]])
+
+    return np.dot((input_XY - center_coord), rotation_matrix) + center_coord
+
+
+def get_trx(normalized_dfs, pxpermm, rand_rot):
+    trx = {}
+    for fly_key in normalized_dfs:
+        fly = normalized_dfs[fly_key]
+        if rand_rot:
+            rand_rot_value = random.randint(1, 360)
+            x, y = fly["pos x"].to_numpy(), fly["pos y"].to_numpy()
+            coords = rotation(np.column_stack((x, y)), [0.5, 0.5], np.random.randint(rand_rot_value))
+            dict_values = {
+                "pos x": coords[:, 0],
+                "pos y": coords[:, 1],
+                "ori": fly["ori"].to_numpy(),
+                "a": fly["a"].to_numpy(),
+                "pxpermm": pxpermm[fly_key],
+            }
+            trx.update({fly_key: pd.DataFrame(dict_values)})
+
+    return trx
+
+
+def normalize_group(group, is_pseudo):
+    """"""
     normalization = json.load(open(settings.NROMALIZATION))
     pxpermm = json.load(open(settings.PXPERMM))
-    normalized_dfs,  pxpermm_dict= {}, {}
-    # TODO: fix this number 12 in for loop, dynamicaly determine by number of flies
-    for group_name in random.sample(list(pick_random_groups.keys()), 12):
-        norm, group_path = normalization[group_name], pick_random_groups[group_name]
-        group_files = fileio.load_files_from_folder(group_path, file_format=".csv")
-        fly_path = random.choice(list(group_files.values()))
-        df = pd.read_csv(fly_path, usecols=["pos x", "pos y", "ori", "a"])
-        df["pos x"] = (df["pos x"] - norm["x"] + norm["radius"]) / (2 * norm["radius"])
-        df["pos y"] = (df["pos y"] - norm["y"] + norm["radius"]) / (2 * norm["radius"])
-        df["a"] = df["a"] / (2 * norm["radius"])
-
-        normalized_dfs.update({group_name: df})
-        pxpermm_dict.update({group_name: pxpermm[group_name] / (2 * norm["radius"])})
-
-    return normalized_dfs, pxpermm_dict
-
-
-def normalize_group(group, normalization, pxpermm, group_name):
     normalized_dfs, pxpermm_dict = {}, {}
-    for fly_name, fly_path in group.items():
-        if group_name == "random":
-            norm = normalization[fly_name]
-            pxpermm_group = pxpermm[fly_name] / (2 * norm["radius"])
 
-        else:
+    if is_pseudo:
+        all_flies_paths = {}
+        for group_name in random.sample(list(group.keys()), 12):
+            norm, group_path = normalization[group_name], group[group_name]
+            group_files = fileio.load_files_from_folder(group_path, file_format=".csv")
+            fly_path = random.choice(list(group_files.values()))
+            df = pd.read_csv(fly_path, usecols=["pos x", "pos y", "ori", "a"])
+            df["pos x"] = (df["pos x"] - norm["x"] + norm["radius"]) / (2 * norm["radius"])
+            df["pos y"] = (df["pos y"] - norm["y"] + norm["radius"]) / (2 * norm["radius"])
+            df["a"] = df["a"] / (2 * norm["radius"])
+            normalized_dfs.update({group_name: df})
+            pxpermm_dict.update({group_name: pxpermm[group_name] / (2 * norm["radius"])})
+
+    if not is_pseudo:
+        for group_name, group_path in group.items():
             norm = normalization[group_name]
             pxpermm_group = pxpermm[group_name] / (2 * norm["radius"])
-
-        df = pd.read_csv(fly_path, usecols=["pos x", "pos y", "ori", "a"])
-        df["pos x"] = (df["pos x"] - norm["x"] + norm["radius"]) / (2 * norm["radius"])
-        df["pos y"] = (df["pos y"] - norm["y"] + norm["radius"]) / (2 * norm["radius"])
-        df["a"] = df["a"] / (2 * norm["radius"])
-
-        normalized_dfs.update({fly_name: df})
-        pxpermm_dict.update({fly_name: pxpermm_group})
-
-    return (normalized_dfs, pxpermm_dict)
+            all_flies_paths = fileio.load_files_from_folder(group_path, file_format=".csv")
+            for fly_name, fly_path in all_flies_paths.items():
+                df = pd.read_csv(fly_path, usecols=["pos x", "pos y", "ori", "a"])
+                df["pos x"] = (df["pos x"] - norm["x"] + norm["radius"]) / (2 * norm["radius"])
+                df["pos y"] = (df["pos y"] - norm["y"] + norm["radius"]) / (2 * norm["radius"])
+                df["a"] = df["a"] / (2 * norm["radius"])
+                normalized_dfs.update({fly_name: df})
+                pxpermm_dict.update({fly_name: pxpermm_group})
+                        
+    return normalized_dfs, pxpermm_dict
 
 
 def group_space_angle_hist(normalized_dfs, pxpermm, is_pseudo):
     """"""
-    
-    degree_bins = np.arange(-177.5, 177.6, settings.ANGLE_BIN)
-    distance_bins = np.arange(0.125, 99.8751, settings.DISTANCE_BIN)
-    total = np.zeros((len(degree_bins) + 1, len(distance_bins) - 1))
-
     for fly1_key, fly2_key in list(itertools.permutations(normalized_dfs.keys(), 2)):
         df1, df2 = normalized_dfs[fly1_key].copy(deep=True), normalized_dfs[fly2_key].copy(deep=True)
         df1_array, df2_array = df1.to_numpy(), df2.to_numpy()
@@ -100,16 +124,16 @@ def group_space_angle_hist(normalized_dfs, pxpermm, is_pseudo):
             movecut = 0 if len(peaks) == 0 else c[peaks[0]]
             mask = (distance <= settings.DISTANCE_MAX) & (movement > (movecut * pxpermm[fly1_key] / settings.FPS))
         
-        else:
-            mask = distance <= settings.DISTANCE_MAX
+        else: mask = distance <= settings.DISTANCE_MAX
 
-        angle, distance = angle[mask], distance[mask]
-        hist, _, _ = np.histogram2d(
-            angle,
-            distance,
-            bins=(degree_bins, distance_bins),
-            range=[[-180, 180], [0, 100.0]],
-        )
+        degree_bins = np.arange(-177.5, 177.6, settings.ANGLE_BIN)
+        distance_bins = np.arange(0.125, 99.8751, settings.DISTANCE_BIN)
+        total = np.zeros((len(degree_bins) + 1, len(distance_bins) - 1))
+
+        hist, _, _ = np.histogram2d(angle[mask],
+                                    distance[mask],
+                                    bins=(degree_bins, distance_bins),
+                                    range=[[-180, 180], [0, 100.0]])
 
         hist = hist.T
         temp = np.mean([hist[:, 0], hist[:, -1]], axis=0)
@@ -118,6 +142,7 @@ def group_space_angle_hist(normalized_dfs, pxpermm, is_pseudo):
 
     if is_pseudo:
         total = np.ceil(total)
+
         return total.T
     
     else:
@@ -127,56 +152,10 @@ def group_space_angle_hist(normalized_dfs, pxpermm, is_pseudo):
         return norm_total
 
 
-# def pseudo_group_space_angle_hist(normalized_dfs, pxpermm):
-#     """ """
-#     degree_bins = np.arange(-177.5, 177.6, settings.ANGLE_BIN)
-#     distance_bins = np.arange(0.125, 99.8751, settings.DISTANCE_BIN)
-#     total = np.zeros((len(degree_bins) + 1, len(distance_bins) - 1))
-
-#     for fly1_key, fly2_key in list(itertools.permutations(normalized_dfs.keys(), 2)):
-#         df1, df2 = normalized_dfs[fly1_key].copy(deep=True), normalized_dfs[fly2_key].copy(deep=True)
-#         df1_array, df2_array = df1.to_numpy(), df2.to_numpy()
-#         a = np.mean(df1_array[:, 3])
-#         distance = np.sqrt((df1_array[:, 0] - df2_array[:, 0]) ** 2 + (df1_array[:, 1] - df2_array[:, 1]) ** 2)
-#         distance = np.round(distance / (a * 4), 4)
-#         checkang = (np.arctan2(df2_array[:, 1] - df1_array[:, 1], df2_array[:, 0] - df1_array[:, 0])) * 180 / np.pi
-#         angle = np.round(angledifference_nd(checkang, df1_array[:, 2] * 180 / np.pi))
-
-#         if settings.MOVECUT:
-#             movement = np.sqrt(
-#                 (df1_array[:, 0] - np.roll(df1_array[:, 0], 1)) ** 2
-#                 + (df1_array[:, 1] - np.roll(df1_array[:, 1], 1)) ** 2
-#             )
-#             movement[0] = movement[1]
-#             movement = movement / pxpermm[fly1_key] / settings.FPS
-#             n, c = np.histogram(movement, bins=np.arange(0, 2.51, 0.01))
-#             peaks, _ = find_peaks((np.max(n) - n) / np.max(np.max(n) - n), prominence=0.05)
-#             movecut = 0 if len(peaks) == 0 else c[peaks[0]]
-#             mask = (distance <= settings.DISTANCE_MAX) & (movement > (movecut * pxpermm[fly1_key] / settings.FPS))
-
-#         else:
-#             mask = distance <= settings.DISTANCE_MAX
-
-#         angle, distance = angle[mask], distance[mask]
-#         hist, _, _ = np.histogram2d(
-#             angle,
-#             distance,
-#             bins=(degree_bins, distance_bins),
-#             range=[[-180, 180], [0, 100.0]],
-#         )
-
-#         hist = hist.T
-#         temp = np.mean([hist[:, 0], hist[:, -1]], axis=0)
-#         hist = np.hstack((temp[:, np.newaxis], hist, temp[:, np.newaxis]))
-#         total += hist.T
-
-#     total = np.ceil(total)
-#     return total.T
-
-
 def calculate_N(random_group):
-    normalized_dfs, pxpermm_dict = normalize_random_group(random_group)
+    normalized_dfs, pxpermm_dict = normalize_group(random_group, is_pseudo=True)
     N = group_space_angle_hist(normalized_dfs, pxpermm_dict, is_pseudo=False)
+    
     return N
 
 
@@ -192,6 +171,9 @@ def boot_pseudo_fly_space(treatment, temp_ind):
 
 
 def fast_flag_interactions(trx, timecut, minang, bl, start, exptime, nflies, fps, movecut):
+    """
+    #TODO FIX THIS CODE
+    """
     sorted_keys = natsort.natsorted(trx.keys())
 
     trx = {k: trx[k] for k in sorted_keys}
@@ -263,26 +245,14 @@ def fast_flag_interactions(trx, timecut, minang, bl, start, exptime, nflies, fps
     int_times = int_times[int_times != 0]
 
     return int_times
+    
 
 
-def rotation(input_XY, center, anti_clockwise_angle):
-    """Rotates the input_XY coordinates by a given angle about a center."""
-    degree = 1  # for radians use degree=0
-    r, c = input_XY.shape
-    if input_XY.shape[1] != 2: raise ValueError("Not enough columns in coordinates XY")
-    r, c = len(center), len([center[0]])
-    if (r != 1 and c == 2) or (r == 1 and c != 2): raise ValueError('Error in the size of the "center" matrix')
-    center_coord = input_XY.copy()
-    center_coord[:, 0], center_coord[:, 1] = center[0], center[1]
-    anti_clockwise_angle = -1 * anti_clockwise_angle
-    if degree == 1: anti_clockwise_angle = np.deg2rad(anti_clockwise_angle)
-    rotation_matrix = np.array([[np.cos(anti_clockwise_angle), -np.sin(anti_clockwise_angle)],
-                                [np.sin(anti_clockwise_angle), np.cos(anti_clockwise_angle)]])
-
-    return np.dot((input_XY - center_coord), rotation_matrix) + center_coord
-
-
-def pseudo_fast_flag_interactions(trx, timecut, minang, bl, start, exptime, nflies, fps, movecut):
+def pseudo_fast_flag_interactions(trx, timecut, minang, bl, start, exptime, nflies, fps, movecut): 
+    """
+    #TODO FIX THIS CODE
+    """
+    
     start = round(start * 60 * fps + 1)
     nflies = len(trx)
     mindist = np.zeros((nflies, 1))
@@ -340,60 +310,41 @@ def pseudo_fast_flag_interactions(trx, timecut, minang, bl, start, exptime, nfli
     return int_times
 
 
-def get_trx(normalized_dfs, pxpermm, rand_rot):
-    trx = {}
-    for fly_key in normalized_dfs:
-        fly = normalized_dfs[fly_key]
-        if rand_rot:
-            rand_rot_value = random.randint(1, 360)
-            x, y = fly["pos x"].to_numpy(), fly["pos y"].to_numpy()
-            coords = rotation(np.column_stack((x, y)), [0.5, 0.5], np.random.randint(rand_rot_value))
-            dict_values = {
-                "pos x": coords[:, 0],
-                "pos y": coords[:, 1],
-                "ori": fly["ori"].to_numpy(),
-                "a": fly["a"].to_numpy(),
-                "pxpermm": pxpermm[fly_key],
-            }
-            trx.update({fly_key: pd.DataFrame(dict_values)})
-
-    return trx
-
-
 def calculate_interaction(pi, *args):
     trx, tempangle, tempdistance, start, exptime, nflies, fps = args
     return pseudo_fast_flag_interactions(trx, 0, tempangle, tempdistance, start, exptime, nflies, settings.FPS, 0)
 
 
 def normalize_random_group_iteration(pi, pick_random_groups, rand_rot, tempangle, tempdistance, start, exptime, fps):
-    normalized_dfs, pxpermm = normalize_random_group(pick_random_groups)
-    nflies = len(normalized_dfs)
+    normalized_dfs, pxpermm = normalize_group(pick_random_groups, is_pseudo=True)
     trx = get_trx(normalized_dfs, pxpermm, rand_rot)
+    nflies=len(normalized_dfs)
+
     return (pi,) + (trx, tempangle, tempdistance, start, exptime, nflies, fps)
 
 
+def process_iteration(pick_random_groups):
+    normalized_dfs, pxpermm_dict = normalize_group(pick_random_groups, is_pseudo=True)
+    N = group_space_angle_hist(normalized_dfs, pxpermm_dict, is_pseudo=True)
+
+    return N
+
+
 def boot_pseudo_times(treatment, nrand2, temp_ind, tempangle, tempdistance, start, exptime):
-    rand_rot = 1
     pick_random_groups = {list(treatment.keys())[i]: list(treatment.values())[i] for i in temp_ind}
 
     pool = multiprocessing.Pool()
+    rand_rot=1
     args_list = [(pi, pick_random_groups, rand_rot, tempangle, tempdistance, start, exptime, settings.FPS) for pi in range(nrand2)]
     list_args = pool.starmap(normalize_random_group_iteration, args_list)
+    
     times = [None] * nrand2
     times = pool.starmap(calculate_interaction, list_args)
+
     pool.close()
     pool.join()
 
     return times
-
-
-
-
-def process_iteration(pick_random_groups):
-    normalized_dfs, pxpermm_dict = normalize_random_group(pick_random_groups)
-    N = group_space_angle_hist(normalized_dfs, pxpermm_dict, is_pseudo=True)
-
-    return N
 
 
 def boot_pseudo_fly_space(treatment, temp_ind):
@@ -409,7 +360,7 @@ def boot_pseudo_fly_space(treatment, temp_ind):
 def process_group(args):
     group_path, tempangle, tempdistance = args
     trx = fileio.load_files_from_folder(group_path, file_format=".csv")
-    nflies = len(trx)
+    nflies= len(trx)
     return fast_flag_interactions(
         trx,
         settings.TIMECUT,
