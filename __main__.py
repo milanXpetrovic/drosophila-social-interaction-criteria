@@ -37,18 +37,17 @@ treatment = {k: treatment[k] for k in sorted_keys}
 df = pd.DataFrame(columns=["distance", "angle", "time"])
 ni = 0
 
-
-all_hists = []
-start = time.time()
-for group_name, group_path in treatment.items():
-    group = {group_name: group_path}
-    normalized_dfs, pxpermm_group = SL.normalize_group(group, is_pseudo=False)
-    hist = SL.group_space_angle_hist(normalized_dfs, pxpermm_group, is_pseudo=False)
-    all_hists.append(hist)
-superN = np.sum(all_hists, axis=0)
+# all_hists = []
+# start = time.time()
+# for group_name, group_path in treatment.items():
+#     group = {group_name: group_path}
+#     normalized_dfs, pxpermm_group = SL.normalize_group(group, is_pseudo=False)
+#     hist = SL.group_space_angle_hist(normalized_dfs, pxpermm_group, is_pseudo=False)
+#     all_hists.append(hist)
+# superN = np.sum(all_hists, axis=0)
 # np.save('./superN.npy', superN)
 
-# superN = np.load('./superN.npy')
+superN = np.load('./superN.npy')
 
 while len(df) < 500:
     print(ni)
@@ -252,15 +251,3 @@ while len(df) < 500:
             print(e)
             storeN = storeN - (superN / np.sum(superN) - pseudo_N / np.sum(pseudo_N)) / nrand1
             distance[ni], angle[ni], time_arr[ni] = 0, 0, 0
-
-
-#%%
-import time
-
-start = time.time()
-files_read = 0 
-for group_name, group_path in treatment.items():
-    trx = fileio.load_files_from_folder(group_path, file_format=".csv")
-    files_read += len(trx)
-
-print("{time.time() - start}")
