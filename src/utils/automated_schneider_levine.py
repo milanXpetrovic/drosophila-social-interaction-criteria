@@ -76,12 +76,19 @@ def normalize_group(group, is_pseudo):
         all_flies_paths = {}
         for group_name in random.sample(list(group.keys()), 12):
             norm, group_path = normalization[group_name], group[group_name]
-            group_files = fileio.load_files_from_folder(group_path, file_format=".csv")
+            group_files = fileio.load_files_from_folder(group_path, file_format=".npy")
             fly_path = random.choice(list(group_files.values()))
-            df = pd.read_csv(fly_path, usecols=["pos x", "pos y", "ori", "a"])
+
+            # df = pd.read_csv(fly_path, usecols=["pos x", "pos y", "ori", "a"])
+            
+            ## TODO set here numpy
+            npy = np.load(fly_path)
+            df = pd.DataFrame(npy[:, 1:], columns=["pos x", "pos y", "ori", "a", "b"], index=npy[:, 0])
+
             df["pos x"] = (df["pos x"] - norm["x"] + norm["radius"]) / (2 * norm["radius"])
             df["pos y"] = (df["pos y"] - norm["y"] + norm["radius"]) / (2 * norm["radius"])
             df["a"] = df["a"] / (2 * norm["radius"])
+
             normalized_dfs.update({group_name: df})
             pxpermm_dict.update({group_name: pxpermm[group_name] / (2 * norm["radius"])})
 
@@ -89,9 +96,14 @@ def normalize_group(group, is_pseudo):
         for group_name, group_path in group.items():
             norm = normalization[group_name]
             pxpermm_group = pxpermm[group_name] / (2 * norm["radius"])
-            all_flies_paths = fileio.load_files_from_folder(group_path, file_format=".csv")
+            all_flies_paths = fileio.load_files_from_folder(group_path, file_format=".npy")
             for fly_name, fly_path in all_flies_paths.items():
-                df = pd.read_csv(fly_path, usecols=["pos x", "pos y", "ori", "a"])
+
+                ## TODO set here numpy
+                # df = pd.read_csv(fly_path, usecols=["pos x", "pos y", "ori", "a"])
+                npy = np.load(fly_path)
+                df = pd.DataFrame(npy[:, 1:], columns=["pos x", "pos y", "ori", "a", "b"], index=npy[:, 0])
+
                 df["pos x"] = (df["pos x"] - norm["x"] + norm["radius"]) / (2 * norm["radius"])
                 df["pos y"] = (df["pos y"] - norm["y"] + norm["radius"]) / (2 * norm["radius"])
                 df["a"] = df["a"] / (2 * norm["radius"])
@@ -142,7 +154,6 @@ def group_space_angle_hist(normalized_dfs, pxpermm, is_pseudo):
 
     if is_pseudo:
         total = np.ceil(total)
-
         return total.T
     
     else:
@@ -185,7 +196,11 @@ def fast_flag_interactions(trx, timecut, minang, bl, start, exptime, nflies, fps
     mindist = np.zeros((nflies, 1))
     dict_dfs = {}
     for i, (fly_name, fly_path) in enumerate(trx.items()):
-        df = pd.read_csv(fly_path, usecols=["pos x", "pos y", "ori", "a"])
+        ## TODO set here numpy
+        # df = pd.read_csv(fly_path, usecols=["pos x", "pos y", "ori", "a"])
+        npy = np.load(fly_path)
+        df = pd.DataFrame(npy[:, 1:], columns=["pos x", "pos y", "ori", "a", "b"], index=npy[:, 0])
+
         mindist[i] = np.mean(df["a"])
         dict_dfs.update({fly_name: df})
 
@@ -195,13 +210,13 @@ def fast_flag_interactions(trx, timecut, minang, bl, start, exptime, nflies, fps
     for i in range(nflies):
         for ii in range(nflies):
             fly1_key, fly2_key = list(trx.keys())[i], list(trx.keys())[ii]
-            df1, df2 = dict_dfs[fly1_key].copy(deep=True), dict_dfs[fly2_key].copy(deep=True)
-            df1_array, df2_array = df1.to_numpy(), df2.to_numpy()
-            distance = np.sqrt((df1_array[:, 0] - df2_array[:, 0]) ** 2 + (df1_array[:, 1] - df2_array[:, 1]) ** 2)
+            df1 = dict_dfs[fly1_key].to_numpy()
+            df2 = dict_dfs[fly2_key].to_numpy()
+            distance = np.sqrt((df1[:, 0] - df2[:, 0]) ** 2 + (df1[:, 1] - df2[:, 1]) ** 2)
             distances[i, ii, :] = distance  # / (a * 4), 4
-            checkang = (np.arctan2(df2_array[:, 1] - df1_array[:, 1], df2_array[:, 0] - df1_array[:, 0])) * 180 / np.pi
+            checkang = (np.arctan2(df2[:, 1] - df1[:, 1], df2[:, 0] - df1[:, 0])) * 180 / np.pi
 
-            angle = angledifference_nd(checkang, df1_array[:, 2] * 180 / np.pi)
+            angle = angledifference_nd(checkang, df1[:, 2] * 180 / np.pi)
             angles[i, ii, :] = angle
 
     ints = np.double(np.abs(angles) < minang) + np.double(distances < np.tile(mindist, (nflies, 1, m[1])))
@@ -266,19 +281,15 @@ def pseudo_fast_flag_interactions(trx, timecut, minang, bl, start, exptime, nfli
     mindist = 4 * bl * mindist
     distances = np.zeros((nflies, nflies, m[1]))
     angles = np.zeros((nflies, nflies, m[1]))
-    dict_dfs = trx
     for i in range(nflies):
         for ii in range(nflies):
             fly1_key, fly2_key = list(trx.keys())[i], list(trx.keys())[ii]
-            df1, df2 = dict_dfs[fly1_key].copy(deep=True), dict_dfs[fly2_key].copy(deep=True)
-            df1_array, df2_array = df1.to_numpy(), df2.to_numpy()
-        
-            distances[i, ii, :] = np.sqrt((df1_array[:, 0] - df2_array[:, 0]) ** 2 +
-                                          (df1_array[:, 1] - df2_array[:, 1]) ** 2)
-
-            checkang = (np.arctan2(df2_array[:, 1] - df1_array[:, 1], df2_array[:, 0] - df1_array[:, 0])) * 180 / np.pi
-
-            angle = angledifference_nd(checkang, df1_array[:, 2] * 180 / np.pi)
+            df1 = trx[fly1_key].to_numpy()
+            df2 = trx[fly2_key].to_numpy()
+       
+            distances[i, ii, :] = np.sqrt((df1[:, 0] - df2[:, 0]) ** 2 + (df1[:, 1] - df2[:, 1]) ** 2)
+            checkang = (np.arctan2(df2[:, 1] - df1[:, 1], df2[:, 0] - df1[:, 0])) * 180 / np.pi
+            angle = angledifference_nd(checkang, df1[:, 2] * 180 / np.pi)
             angles[i, ii, :] = angle
 
     ints = np.double(np.abs(angles) < minang) + np.double(distances < np.tile(mindist, (nflies, 1, m[1])))
@@ -359,7 +370,7 @@ def boot_pseudo_fly_space(treatment, temp_ind):
 
 def process_group(args):
     group_path, tempangle, tempdistance = args
-    trx = fileio.load_files_from_folder(group_path, file_format=".csv")
+    trx = fileio.load_files_from_folder(group_path, file_format=".npy")
     nflies= len(trx)
     return fast_flag_interactions(
         trx,

@@ -29,12 +29,10 @@ def load_multiple_folders(path):
 
 
 def load_files_from_folder(path, file_format='.csv', n_sort=False):
-    # import folder sa csvomima
     if not os.listdir(path):
         sys.exit('Directory is empty')
 
     files_dict = {}
-
     for r, d, f in os.walk(path):
         if n_sort:
             f = natural_sort(f)

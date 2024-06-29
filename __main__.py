@@ -2,6 +2,7 @@
 
 import json
 import multiprocessing
+import os
 import random
 import sys
 import time
@@ -50,10 +51,18 @@ ni = 0
 superN = np.load('./superN.npy')
 
 while len(df) < 500:
-    print(ni)
+    # print(ni)
     total_time = time.time()
     temp_ind = random.sample(range(len(treatment)), settings.RANDOM_GROUP_SIZE)
-    # pick_random_groups = {list(treatment.keys())[i]: list(treatment.values())[i] for i in temp_ind}
+    pick_random_groups = {list(treatment.keys())[i]: list(treatment.values())[i] for i in temp_ind}
+    
+    # all_hists = []
+    # for group_name, group_path in treatment.items():
+    #     group = {group_name: group_path}
+    #     normalized_dfs, pxpermm_group = SL.normalize_group(group, is_pseudo=False)
+    #     hist = SL.group_space_angle_hist(normalized_dfs, pxpermm_group, is_pseudo=False)
+    #     all_hists.append(hist)
+    # superN = np.sum(all_hists, axis=0)
 
     pseudo_N = SL.boot_pseudo_fly_space(treatment, temp_ind)
     N2 = (superN / np.sum(superN)) - (pseudo_N / np.sum(pseudo_N))
@@ -239,8 +248,9 @@ while len(df) < 500:
                 df = pd.concat([df, d_df], ignore_index=True)
                 df.to_csv(f"data/{settings.TREATMENT}_criteria.csv")
 
-                np.save(f"data/times/{ni}_real_array",  np.concatenate(tstrain))
-                np.save(f"data/times/{ni}_pseudo_array", np.concatenate(ptstrain))
+                times_path = "/srv/milky/drosophila-datasets/CSf_times"
+                np.save(os.path.join(times_path, f"{ni}_real_array.npy"),  np.concatenate(tstrain))
+                np.save(os.path.join(times_path, f"{ni}_pseudo_array.npy"), f"{ni}_pseudo_array.npy", np.concatenate(ptstrain))
 
                 with open("data/output.txt", "a") as file: file.write(f"{ni}: {time.time() - total_time} \n")
                 file.close()
