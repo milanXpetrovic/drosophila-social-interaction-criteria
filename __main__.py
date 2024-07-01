@@ -13,8 +13,8 @@ import pandas as pd
 from scipy.signal import convolve2d
 from skimage import measure as skimage_label
 
-import src.utils.automated_schneider_levine as SL
 import src.utils.fileio as fileio
+import src.utils.utils as SL
 from src import settings
 
 angle_bin = settings.ANGLE_BIN
@@ -38,6 +38,8 @@ treatment = {k: treatment[k] for k in sorted_keys}
 df = pd.DataFrame(columns=["distance", "angle", "time"])
 ni = 0
 
+# print(f"number of cores {os.cpu_count()}")
+
 # all_hists = []
 # start = time.time()
 # for group_name, group_path in treatment.items():
@@ -48,7 +50,7 @@ ni = 0
 # superN = np.sum(all_hists, axis=0)
 # np.save('./superN.npy', superN)
 
-superN = np.load('./superN.npy')
+# superN = np.load('./superN.npy')
 
 while len(df) < 500:
     # print(ni)
@@ -56,39 +58,32 @@ while len(df) < 500:
     temp_ind = random.sample(range(len(treatment)), settings.RANDOM_GROUP_SIZE)
     pick_random_groups = {list(treatment.keys())[i]: list(treatment.values())[i] for i in temp_ind}
     
-    # all_hists = []
-    # for group_name, group_path in treatment.items():
-    #     group = {group_name: group_path}
-    #     normalized_dfs, pxpermm_group = SL.normalize_group(group, is_pseudo=False)
-    #     hist = SL.group_space_angle_hist(normalized_dfs, pxpermm_group, is_pseudo=False)
-    #     all_hists.append(hist)
-    # superN = np.sum(all_hists, axis=0)
+    treatment_items = treatment.items()
+    with multiprocessing.Pool() as pool: all_hists = pool.starmap(SL. process_norm_group, treatment_items)
 
+    superN = np.sum(all_hists, axis=0)
     pseudo_N = SL.boot_pseudo_fly_space(treatment, temp_ind)
     N2 = (superN / np.sum(superN)) - (pseudo_N / np.sum(pseudo_N))
     falloff = np.arange(1, N2.shape[0] + 1).astype(float) ** -1
     N2 = N2 * np.tile(falloff, (N2.shape[1], 1)).T
     N2[N2 <= np.percentile(N2[N2 > 0], 95)] = 0
+
     C = {}
     C[0] = np.arange(0, settings.DISTANCE_MAX, settings.DISTANCE_BIN)
     C[1] = np.arange(-180, 181, settings.ANGLE_BIN)
     a, b = np.where(N2 > 0)
     tempangle, tempdistance = np.max(np.abs(C[1][b - 1])), C[0][np.max(a - 1)]
 
-    h = np.array(
-        [
-            [0.0181, 0.0492, 0.0492, 0.0181],
-            [0.0492, 0.1336, 0.1336, 0.0492],
-            [0.0492, 0.1336, 0.1336, 0.0492],
-            [0.0181, 0.0492, 0.0492, 0.0181],
-        ]
-    )
+    h = np.array([
+            [0.0181, 0.0492, 0.0492, 0.0181],[0.0492, 0.1336, 0.1336, 0.0492],
+            [0.0492, 0.1336, 0.1336, 0.0492],[0.0181, 0.0492, 0.0492, 0.0181],
+        ])
     h /= np.sum(h)
 
     N2 = convolve2d(N2, h, mode="same")
     N2_int = np.where(N2 > 0, 1, N2)
     labeled_image, num_labels = skimage_label.label(N2_int, connectivity=2, return_num=True)
-    # pixel_idx_list = 
+
     CC = {"Connectivity": 8}
     CC["ImageSize "] = labeled_image.shape
     CC["NumObjects"] = num_labels
@@ -112,14 +107,14 @@ while len(df) < 500:
     N2[N2 < np.percentile(N2[N2 > 0], 75)] = 0
     N2_int = np.where(N2 > 0, 1, N2)
     labeled_image, num_labels = skimage_label.label(N2_int, connectivity=2, return_num=True)
-    # pixel_idx_list = [np.where(labeled_image == label_num) for label_num in range(1, num_labels + 1)]
+
     CC["ImageSize "] = labeled_image.shape
     CC["NumObjects"] = num_labels
     CC["PixelIdxList"] =  [np.where(labeled_image == label_num) for label_num in range(1, num_labels + 1)]
 
     num_pixels = np.array([len(pixel_idx) for pixel_idx in CC["PixelIdxList"]])
     idx = np.where(num_pixels < 5)[0]
-    N3 = np.copy(N2)
+    N3 = np.copy(N2) 
 
     for i in range(CC["NumObjects"]):
         CC_pixel_idx_list = CC["PixelIdxList"][i]
@@ -158,6 +153,7 @@ while len(df) < 500:
             update = 0
 
             tempang = N2[
+                
                 np.where((C[0] == 1) | (C[0] == tempdistance))[0][0] : np.where(C[0] == tempdistance)[0][0] + 1,
                 np.where((C[1] >= -tempangle - angle_bin) & (C[1] <= tempangle + angle_bin))[0][0] : 
                 np.where((C[1] >= -tempangle - angle_bin) & (C[1] <= tempangle + angle_bin))[0][-1] + 1
@@ -196,13 +192,12 @@ while len(df) < 500:
         ## Time
         pick_random_groups = {list(treatment.keys())[i]: list(treatment.values())[i] for i in temp_ind}
         
-        pool = multiprocessing.Pool()
         args = [(list(pick_random_groups.values())[i], tempangle, tempdistance) for i in range(0, len(temp_ind))]
-        tstrain = list(pool.map(SL.process_group, args))
-        pool.close()
-        pool.join()
+        
+        with multiprocessing.Pool() as pool: tstrain = list(pool.map(SL.process_group, args))
 
         ptstrain = SL.boot_pseudo_times(treatment, nrand2, temp_ind, tempangle, tempdistance, start, exptime)
+
         M = np.arange(0, 30 * 60 + 0.05, 0.05)
         N = np.zeros((len(ptstrain), len(M) - 1))
 

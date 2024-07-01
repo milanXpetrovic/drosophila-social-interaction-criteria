@@ -1,6 +1,7 @@
 import itertools
 import json
 import multiprocessing
+import os
 import random
 import time
 
@@ -50,18 +51,18 @@ def get_trx(normalized_dfs, pxpermm, rand_rot):
     trx = {}
     for fly_key in normalized_dfs:
         fly = normalized_dfs[fly_key]
-        if rand_rot:
-            rand_rot_value = random.randint(1, 360)
-            x, y = fly["pos x"].to_numpy(), fly["pos y"].to_numpy()
-            coords = rotation(np.column_stack((x, y)), [0.5, 0.5], np.random.randint(rand_rot_value))
-            dict_values = {
-                "pos x": coords[:, 0],
-                "pos y": coords[:, 1],
-                "ori": fly["ori"].to_numpy(),
-                "a": fly["a"].to_numpy(),
-                "pxpermm": pxpermm[fly_key],
-            }
-            trx.update({fly_key: pd.DataFrame(dict_values)})
+        # if rand_rot:
+        rand_rot_value = random.randint(1, 360)
+        x, y = fly["pos x"].to_numpy(), fly["pos y"].to_numpy()
+        coords = rotation(np.column_stack((x, y)), [0.5, 0.5], np.random.randint(rand_rot_value))
+        dict_values = {
+            "pos x": coords[:, 0],
+            "pos y": coords[:, 1],
+            "ori": fly["ori"].to_numpy(),
+            "a": fly["a"].to_numpy(),
+            "pxpermm": pxpermm[fly_key],
+        }
+        trx.update({fly_key: pd.DataFrame(dict_values)})
 
     return trx
 
@@ -76,19 +77,13 @@ def normalize_group(group, is_pseudo):
         all_flies_paths = {}
         for group_name in random.sample(list(group.keys()), 12):
             norm, group_path = normalization[group_name], group[group_name]
-            group_files = fileio.load_files_from_folder(group_path, file_format=".npy")
-            fly_path = random.choice(list(group_files.values()))
-
-            # df = pd.read_csv(fly_path, usecols=["pos x", "pos y", "ori", "a"])
+            fly_path = os.path.join(group_path, f"fly{random.randint(0, 11)}.npy")
             
-            ## TODO set here numpy
             npy = np.load(fly_path)
             df = pd.DataFrame(npy[:, 1:], columns=["pos x", "pos y", "ori", "a", "b"], index=npy[:, 0])
-
             df["pos x"] = (df["pos x"] - norm["x"] + norm["radius"]) / (2 * norm["radius"])
             df["pos y"] = (df["pos y"] - norm["y"] + norm["radius"]) / (2 * norm["radius"])
             df["a"] = df["a"] / (2 * norm["radius"])
-
             normalized_dfs.update({group_name: df})
             pxpermm_dict.update({group_name: pxpermm[group_name] / (2 * norm["radius"])})
 
@@ -98,12 +93,8 @@ def normalize_group(group, is_pseudo):
             pxpermm_group = pxpermm[group_name] / (2 * norm["radius"])
             all_flies_paths = fileio.load_files_from_folder(group_path, file_format=".npy")
             for fly_name, fly_path in all_flies_paths.items():
-
-                ## TODO set here numpy
-                # df = pd.read_csv(fly_path, usecols=["pos x", "pos y", "ori", "a"])
                 npy = np.load(fly_path)
                 df = pd.DataFrame(npy[:, 1:], columns=["pos x", "pos y", "ori", "a", "b"], index=npy[:, 0])
-
                 df["pos x"] = (df["pos x"] - norm["x"] + norm["radius"]) / (2 * norm["radius"])
                 df["pos y"] = (df["pos y"] - norm["y"] + norm["radius"]) / (2 * norm["radius"])
                 df["a"] = df["a"] / (2 * norm["radius"])
@@ -172,48 +163,37 @@ def calculate_N(random_group):
 
 def boot_pseudo_fly_space(treatment, temp_ind):
     pick_random_groups = {list(treatment.keys())[i]: list(treatment.values())[i] for i in temp_ind}
-    pool = multiprocessing.Pool() 
-    superN = pool.map(calculate_N, pick_random_groups)
-    pool.close()  
-    pool.join()
+    
+    with multiprocessing.Pool() as pool: superN = pool.map(calculate_N, pick_random_groups)
+
     N = np.sum(superN, axis=0)
 
     return N
 
 
 def fast_flag_interactions(trx, timecut, minang, bl, start, exptime, nflies, fps, movecut):
-    """
-    #TODO FIX THIS CODE
-    """
-    sorted_keys = natsort.natsorted(trx.keys())
-
-    trx = {k: trx[k] for k in sorted_keys}
+    """"""
+    trx = {k: trx[k] for k in natsort.natsorted(trx.keys())}
     start = round(start * 60 * fps + 1)
     timecut = timecut * fps
     m = [1, 41040]
     nflies = len(trx)
 
-    mindist = np.zeros((nflies, 1))
     dict_dfs = {}
+    mindist = np.zeros((nflies, 1))
     for i, (fly_name, fly_path) in enumerate(trx.items()):
-        ## TODO set here numpy
-        # df = pd.read_csv(fly_path, usecols=["pos x", "pos y", "ori", "a"])
         npy = np.load(fly_path)
-        df = pd.DataFrame(npy[:, 1:], columns=["pos x", "pos y", "ori", "a", "b"], index=npy[:, 0])
+        dict_dfs[fly_name] = pd.DataFrame(npy[:, 1:], columns=["pos x", "pos y", "ori", "a", "b"], index=npy[:, 0])
+        mindist[i] = dict_dfs[fly_name]["a"].mean() * 4 * bl
 
-        mindist[i] = np.mean(df["a"])
-        dict_dfs.update({fly_name: df})
-
-    mindist = 4 * bl * mindist
     distances, angles = np.zeros((nflies, nflies, m[1])), np.zeros((nflies, nflies, m[1]))
-
     for i in range(nflies):
         for ii in range(nflies):
             fly1_key, fly2_key = list(trx.keys())[i], list(trx.keys())[ii]
             df1 = dict_dfs[fly1_key].to_numpy()
             df2 = dict_dfs[fly2_key].to_numpy()
             distance = np.sqrt((df1[:, 0] - df2[:, 0]) ** 2 + (df1[:, 1] - df2[:, 1]) ** 2)
-            distances[i, ii, :] = distance  # / (a * 4), 4
+            distances[i, ii, :] = distance 
             checkang = (np.arctan2(df2[:, 1] - df1[:, 1], df2[:, 0] - df1[:, 0])) * 180 / np.pi
 
             angle = angledifference_nd(checkang, df1[:, 2] * 180 / np.pi)
@@ -228,8 +208,7 @@ def fast_flag_interactions(trx, timecut, minang, bl, start, exptime, nflies, fps
             if i == ii:
                 ints[i, ii, :] = np.zeros(len(angle))
 
-    idx = np.where(ints != 0)
-    r, c, v = idx[0], idx[1], idx[2]
+    r, c, v = np.where(ints != 0)
     int_times = np.zeros((nflies * m[1], 1))
     int_ind = 0
 
@@ -240,21 +219,10 @@ def fast_flag_interactions(trx, timecut, minang, bl, start, exptime, nflies, fps
             if temp.size != 0:
                 potential_ints = np.concatenate(([np.inf], np.diff(v[temp]), [np.inf]))
                 nints = np.where(potential_ints > 1)[0]
-                durations = np.zeros((len(nints) - 1, 1))
 
                 for ni in range(0, len(nints) - 1):
-                    # durations[ni] = np.sum(np.arange(nints[ni], nints[ni]).size) + 1
-                    # if np.sum(np.arange(nints[ni], nints[ni + 1] - 1).size) < timecut:
-                    #     potential_ints[nints[ni]:nints[ni + 1] - 1] = np.nan
-                    # else:
-                    #     pass
-
                     int_times[int_ind] = np.sum(np.array([len(potential_ints[nints[ni] : nints[ni + 1]])]))
                     int_ind += 1
-
-                    if movecut:
-                        # int_times[int_ind] = int_times[int_ind] - np.sum(too_slow[r[temp[nints[ni]:nints[ni + 1] - 1]], v[temp[nints[ni]:nints[ni + 1] - 1]] : v[temp[nints[ni] : nints[ni + 1] - 1]])
-                        pass
 
     int_times = int_times[: int_ind - 1] / settings.FPS
     int_times = int_times[int_times != 0]
@@ -262,58 +230,59 @@ def fast_flag_interactions(trx, timecut, minang, bl, start, exptime, nflies, fps
     return int_times
     
 
-
-def pseudo_fast_flag_interactions(trx, timecut, minang, bl, start, exptime, nflies, fps, movecut): 
-    """
-    #TODO FIX THIS CODE
-    """
-    
+def pseudo_fast_flag_interactions(pi, *args):
+    trx, minang, bl, start, exptime, nflies, fps = args
     start = round(start * 60 * fps + 1)
     nflies = len(trx)
-    mindist = np.zeros((nflies, 1))
-    m = [1, 41040] ## TODO! THIS SHOULD BE DYNAMICALY DETERMINED
-    i = 0
-    for fly_key in trx.keys():
-        df = trx[fly_key]
-        mindist[i] = np.mean(df["a"])
-        i += 1
-
+    total_len = 41040 ## TODO! THIS SHOULD BE DYNAMICALY DETERMINED
+    mindist = np.array([[np.mean(trx[fly_key]["a"])] for fly_key in trx.keys()])
     mindist = 4 * bl * mindist
-    distances = np.zeros((nflies, nflies, m[1]))
-    angles = np.zeros((nflies, nflies, m[1]))
+
+    distances, angles = np.zeros((nflies, nflies, total_len)), np.zeros((nflies, nflies, total_len))
+    trx_keys = list(trx.keys())
+    
     for i in range(nflies):
-        for ii in range(nflies):
-            fly1_key, fly2_key = list(trx.keys())[i], list(trx.keys())[ii]
+        for j in range(nflies):
+            fly1_key = trx_keys[i]
+            fly2_key = trx_keys[j]
             df1 = trx[fly1_key].to_numpy()
             df2 = trx[fly2_key].to_numpy()
-       
-            distances[i, ii, :] = np.sqrt((df1[:, 0] - df2[:, 0]) ** 2 + (df1[:, 1] - df2[:, 1]) ** 2)
+    
+            distances[i, j, :] = np.sqrt((df1[:, 0] - df2[:, 0]) ** 2 + (df1[:, 1] - df2[:, 1]) ** 2)
             checkang = (np.arctan2(df2[:, 1] - df1[:, 1], df2[:, 0] - df1[:, 0])) * 180 / np.pi
-            angle = angledifference_nd(checkang, df1[:, 2] * 180 / np.pi)
-            angles[i, ii, :] = angle
 
-    ints = np.double(np.abs(angles) < minang) + np.double(distances < np.tile(mindist, (nflies, 1, m[1])))
+            angle1 = checkang
+            angle2 = df1[:, 2] * 180 / np.pi
+            diff = angle2 - angle1
+            adjustlow, adjusthigh = diff < -180, diff > 180
+
+            while any(adjustlow) or any(adjusthigh):
+                diff[adjustlow], diff[adjusthigh] = diff[adjustlow] + 360, diff[adjusthigh] - 360
+                adjustlow, adjusthigh = diff < -180, diff > 180
+
+            angle = diff
+            angles[i, j, :] = angle
+
+    ints = np.double(np.abs(angles) < minang) + np.double(distances < np.tile(mindist, (nflies, 1, total_len)))
     ints[ints < 2], ints[ints > 1] = 0, 1
-    for i in range(nflies):
-        for ii in range(nflies):
-            if i == ii: ints[i, ii, :] = np.zeros(len(angle))
+    ints[np.arange(nflies), np.arange(nflies), :] = 0
+    ints = np.double(np.abs(angles) < minang) + np.double(distances < np.tile(mindist, (nflies, 1, total_len)))
+    ints[ints < 2] = 0
+    ints[ints > 1] = 1
+    
+    for i in range(nflies): ints[i, i, :] = np.zeros(trx[list(trx.keys())[0]].shape[0])
 
-    idx = np.where(ints != 0)
-    r, c, v = idx[0], idx[1], idx[2]
-    int_times = np.zeros((nflies * m[1], 1))
+    r, c, v = np.where(ints != 0)
+    int_times = np.zeros((nflies * total_len, 1))
     int_ind = 0
     for i in range(nflies):
-        for ii in np.setxor1d(np.arange(nflies), i):
-            temp = np.intersect1d(np.where(r == i), np.where(c == ii))
+        for j in np.setxor1d(np.arange(nflies), i):          
+            temp = np.where((r == i) & (c == j))[0]
             if temp.size != 0:
                 potential_ints = np.concatenate(([np.inf], np.diff(v[temp]), [np.inf]))
-                nints = np.where(potential_ints > 1)[0]
-                durations = np.zeros((len(nints) - 1, 1))
-                for ni in range(0, len(nints) - 1):
-                    int_times[int_ind] = np.sum(np.array([len(potential_ints[nints[ni] : nints[ni + 1]])]))
-                    int_ind += 1
-                    if movecut:
-                        pass
+                durations = np.diff(np.where(potential_ints > 1)[0])
+                int_times[int_ind:int_ind+len(durations)] = durations.reshape(-1, 1)
+                int_ind += len(durations)
 
     int_times = int_times[: int_ind - 1] / settings.FPS
     int_times = int_times[int_times != 0]
@@ -321,9 +290,19 @@ def pseudo_fast_flag_interactions(trx, timecut, minang, bl, start, exptime, nfli
     return int_times
 
 
-def calculate_interaction(pi, *args):
-    trx, tempangle, tempdistance, start, exptime, nflies, fps = args
-    return pseudo_fast_flag_interactions(trx, 0, tempangle, tempdistance, start, exptime, nflies, settings.FPS, 0)
+def boot_pseudo_times(treatment, nrand2, temp_ind, tempangle, tempdistance, start, exptime):
+    rand_rot=1
+    times = [None] * nrand2
+    pick_random_groups = {list(treatment.keys())[i]: list(treatment.values())[i] for i in temp_ind}
+    args_list = [(pi, pick_random_groups, rand_rot, tempangle, tempdistance, start, exptime, settings.FPS) for pi in range(nrand2)]
+
+    with multiprocessing.Pool() as pool:
+        list_args = pool.starmap(normalize_random_group_iteration, args_list)
+
+        ##! HERE
+        times = pool.starmap(pseudo_fast_flag_interactions, list_args)
+
+    return times
 
 
 def normalize_random_group_iteration(pi, pick_random_groups, rand_rot, tempangle, tempdistance, start, exptime, fps):
@@ -341,31 +320,19 @@ def process_iteration(pick_random_groups):
     return N
 
 
-def boot_pseudo_times(treatment, nrand2, temp_ind, tempangle, tempdistance, start, exptime):
-    pick_random_groups = {list(treatment.keys())[i]: list(treatment.values())[i] for i in temp_ind}
-
-    pool = multiprocessing.Pool()
-    rand_rot=1
-    args_list = [(pi, pick_random_groups, rand_rot, tempangle, tempdistance, start, exptime, settings.FPS) for pi in range(nrand2)]
-    list_args = pool.starmap(normalize_random_group_iteration, args_list)
-    
-    times = [None] * nrand2
-    times = pool.starmap(calculate_interaction, list_args)
-
-    pool.close()
-    pool.join()
-
-    return times
-
-
 def boot_pseudo_fly_space(treatment, temp_ind):
     pick_random_groups = {list(treatment.keys())[i]: list(treatment.values())[i] for i in temp_ind}
-    pool = multiprocessing.Pool()
-    superN = pool.map(process_iteration, [pick_random_groups] * 15)
-    pool.close()
-    pool.join()
+
+    with multiprocessing.Pool() as pool: superN = pool.map(process_iteration, [pick_random_groups] * 15)
 
     return np.sum(superN, axis=0)
+
+
+def process_norm_group(group_name, group_path):
+    group = {group_name: group_path}
+    normalized_dfs, pxpermm_group = normalize_group(group, is_pseudo=False)
+    hist = group_space_angle_hist(normalized_dfs, pxpermm_group, is_pseudo=False)
+    return hist
 
 
 def process_group(args):
