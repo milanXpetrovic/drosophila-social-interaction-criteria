@@ -617,3 +617,9 @@ def process_group(args):
         settings.FPS,
         0,
     )
+
+def process_norm_group(group_name, group_path):
+    group = {group_name: group_path}
+    normalized_dfs, pxpermm_group = normalize_group(group, is_pseudo=False)
+    hist = group_space_angle_hist(normalized_dfs, pxpermm_group, is_pseudo=False)
+    return hist

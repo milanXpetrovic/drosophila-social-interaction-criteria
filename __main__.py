@@ -14,7 +14,7 @@ from scipy.signal import convolve2d
 from skimage import measure as skimage_label
 
 import src.utils.fileio as fileio
-import src.utils.utils as SL
+import src.utils.old_code as SL
 from src import settings
 
 angle_bin = settings.ANGLE_BIN
@@ -38,20 +38,6 @@ treatment = {k: treatment[k] for k in sorted_keys}
 df = pd.DataFrame(columns=["distance", "angle", "time"])
 ni = 0
 
-# print(f"number of cores {os.cpu_count()}")
-
-# all_hists = []
-# start = time.time()
-# for group_name, group_path in treatment.items():
-#     group = {group_name: group_path}
-#     normalized_dfs, pxpermm_group = SL.normalize_group(group, is_pseudo=False)
-#     hist = SL.group_space_angle_hist(normalized_dfs, pxpermm_group, is_pseudo=False)
-#     all_hists.append(hist)
-# superN = np.sum(all_hists, axis=0)
-# np.save('./superN.npy', superN)
-
-# superN = np.load('./superN.npy')
-
 while len(df) < 500:
     # print(ni)
     total_time = time.time()
@@ -59,7 +45,7 @@ while len(df) < 500:
     pick_random_groups = {list(treatment.keys())[i]: list(treatment.values())[i] for i in temp_ind}
     
     treatment_items = treatment.items()
-    with multiprocessing.Pool() as pool: all_hists = pool.starmap(SL. process_norm_group, treatment_items)
+    with multiprocessing.Pool() as pool: all_hists = pool.starmap(SL.process_norm_group, treatment_items)
 
     superN = np.sum(all_hists, axis=0)
     pseudo_N = SL.boot_pseudo_fly_space(treatment, temp_ind)
@@ -245,7 +231,7 @@ while len(df) < 500:
 
                 times_path = "/srv/milky/drosophila-datasets/CSf_times"
                 np.save(os.path.join(times_path, f"{ni}_real_array.npy"),  np.concatenate(tstrain))
-                np.save(os.path.join(times_path, f"{ni}_pseudo_array.npy"), f"{ni}_pseudo_array.npy", np.concatenate(ptstrain))
+                np.save(os.path.join(times_path, f"{ni}_pseudo_array.npy"), np.concatenate(ptstrain))
 
                 with open("data/output.txt", "a") as file: file.write(f"{ni}: {time.time() - total_time} \n")
                 file.close()

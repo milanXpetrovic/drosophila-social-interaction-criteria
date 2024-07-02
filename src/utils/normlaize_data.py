@@ -1,24 +1,32 @@
+#%%
+import json
 import os
+import sys
 
 import pandas as pd
 
-import src.utils.fileio as fileio
+current_path = os.path.abspath(os.path.dirname(__file__))
+sys.path.append(os.path.join( os.path.abspath(os.path.join(current_path, '..', '..')), 'src'))
 
-parent_path = r"/home/milky/droso-social-interaction-criteria/data/input/trackings/CsCh"
-SCRIPT_OUTPUT = r"/home/milky/droso-social-interaction-criteria/data/input/trackings/CsCh"
-treatment = fileio.load_files_from_folder(parent_path)
+import fileio
 
+import settings
+
+normalization = json.load(open(settings.NROMALIZATION))
+pxpermm = json.load(open(settings.PXPERMM))
+
+
+treatment = fileio.load_multiple_folders(settings.TRACKINGS)
+
+SCRIPT_OUTPUT = "./test"
 
 for group_name, group_path in treatment.items():
     os.makedirs(os.path.join(SCRIPT_OUTPUT, group_name), exist_ok=True)
-
+    norm = normalization[group_name]
     fly_dict = fileio.load_files_from_folder(group_path)
-    min_x, min_y = data_utils.find_group_mins(group_path)
 
-    group_norm_path = os.path.join(settings.NORMALIZATION_DIR, TREATMENT, f"{group_name.replace('.csv', '')}.toml")
+    sys.exit()
 
-    with open(group_norm_path, "r") as group_norm:
-        group_norm = toml.load(group_norm)
 
     for fly_name, fly_path in fly_dict.items():
         df = pd.read_csv(fly_path)
