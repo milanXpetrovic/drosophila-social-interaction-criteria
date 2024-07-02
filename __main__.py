@@ -14,10 +14,11 @@ from scipy.signal import convolve2d
 from skimage import measure as skimage_label
 
 import src.utils.fileio as fileio
-import src.utils.old_code as SL
+import src.utils.utils as SL
 from src import settings
 
 angle_bin = settings.ANGLE_BIN
+
 distance_bin = settings.DISTANCE_BIN
 start = settings.START
 timecut = settings.TIMECUT

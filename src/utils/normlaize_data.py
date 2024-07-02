@@ -25,8 +25,6 @@ for group_name, group_path in treatment.items():
     norm = normalization[group_name]
     fly_dict = fileio.load_files_from_folder(group_path)
 
-    sys.exit()
-
 
     for fly_name, fly_path in fly_dict.items():
         df = pd.read_csv(fly_path)
