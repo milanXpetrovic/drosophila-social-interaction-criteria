@@ -77,7 +77,7 @@ def normalize_group(group, is_pseudo):
         all_flies_paths = {}
         for group_name in random.sample(list(group.keys()), 12):
             norm, group_path = normalization[group_name], group[group_name]
-            fly_path = os.path.join(group_path, f"fly{random.randint(0, 11)}.npy")
+            fly_path = os.path.join(group_path, f"fly{random.randint(1, 12)}.npy")
             
             npy = np.load(fly_path)
             df = pd.DataFrame(npy[:, 1:], columns=["pos x", "pos y", "ori", "a", "b"], index=npy[:, 0])
@@ -175,7 +175,7 @@ def fast_flag_interactions(trx, timecut, minang, bl, start, exptime, nflies, fps
     trx = {k: trx[k] for k in sorted_keys}
     start = round(start * 60 * fps + 1)
     timecut = timecut * fps
-    m = [1, 41040]
+    total_len_frames = settings.EXP_DURATION * settings.FPS * 60
     nflies = len(trx)
 
     dict_dfs = {}
@@ -185,8 +185,8 @@ def fast_flag_interactions(trx, timecut, minang, bl, start, exptime, nflies, fps
         dict_dfs[fly_name] = pd.DataFrame(npy[:, 1:], columns=["pos x", "pos y", "ori", "a", "b"], index=npy[:, 0])
         mindist[i] = dict_dfs[fly_name]["a"].mean() * 4 * bl
 
-    distances = np.zeros((nflies, nflies, m[1]))
-    angles = np.zeros((nflies, nflies, m[1]))
+    distances = np.zeros((nflies, nflies, total_len_frames))
+    angles = np.zeros((nflies, nflies, total_len_frames))
 
     dict_dfs = {}
     for fly_name, fly_path in trx.items():
@@ -215,7 +215,7 @@ def fast_flag_interactions(trx, timecut, minang, bl, start, exptime, nflies, fps
             angle = angledifference_nd(checkang, df1_array[:, 2] * 180 / np.pi)
             angles[i, ii, :] = angle
 
-    ints = np.double(np.abs(angles) < minang) + np.double(distances < np.tile(mindist, (nflies, 1, m[1])))
+    ints = np.double(np.abs(angles) < minang) + np.double(distances < np.tile(mindist, (nflies, 1, total_len_frames)))
     ints[ints < 2] = 0
     ints[ints > 1] = 1
 
@@ -227,7 +227,7 @@ def fast_flag_interactions(trx, timecut, minang, bl, start, exptime, nflies, fps
     idx = np.where(ints != 0)
     r, c, v = idx[0], idx[1], idx[2]
 
-    int_times = np.zeros((nflies * m[1], 1))
+    int_times = np.zeros((nflies * total_len_frames, 1))
     int_ind = 0
 
     for i in range(nflies):
@@ -255,11 +255,11 @@ def pseudo_fast_flag_interactions(pi, *args):
     trx, minang, bl, start, exptime, nflies, fps = args
     start = round(start * 60 * fps + 1)
     nflies = len(trx)
-    total_len = 41040 ## TODO! THIS SHOULD BE DYNAMICALY DETERMINED
+    total_len_frames = settings.EXP_DURATION * settings.FPS * 60
     mindist = np.array([[np.mean(trx[fly_key]["a"])] for fly_key in trx.keys()])
     mindist = 4 * bl * mindist
 
-    distances, angles = np.zeros((nflies, nflies, total_len)), np.zeros((nflies, nflies, total_len))
+    distances, angles = np.zeros((nflies, nflies, total_len_frames)), np.zeros((nflies, nflies, total_len_frames))
     trx_keys = list(trx.keys())
     
     for i in range(nflies):
@@ -284,17 +284,17 @@ def pseudo_fast_flag_interactions(pi, *args):
             angle = diff
             angles[i, j, :] = angle
 
-    ints = np.double(np.abs(angles) < minang) + np.double(distances < np.tile(mindist, (nflies, 1, total_len)))
+    ints = np.double(np.abs(angles) < minang) + np.double(distances < np.tile(mindist, (nflies, 1, total_len_frames)))
     ints[ints < 2], ints[ints > 1] = 0, 1
     ints[np.arange(nflies), np.arange(nflies), :] = 0
-    ints = np.double(np.abs(angles) < minang) + np.double(distances < np.tile(mindist, (nflies, 1, total_len)))
+    ints = np.double(np.abs(angles) < minang) + np.double(distances < np.tile(mindist, (nflies, 1, total_len_frames)))
     ints[ints < 2] = 0
     ints[ints > 1] = 1
     
     for i in range(nflies): ints[i, i, :] = np.zeros(trx[list(trx.keys())[0]].shape[0])
 
     r, c, v = np.where(ints != 0)
-    int_times = np.zeros((nflies * total_len, 1))
+    int_times = np.zeros((nflies * total_len_frames, 1))
     int_ind = 0
     for i in range(nflies):
         for j in np.setxor1d(np.arange(nflies), i):          

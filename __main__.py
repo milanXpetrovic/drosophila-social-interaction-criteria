@@ -1,6 +1,7 @@
 # %%
 
 import json
+import logging
 import multiprocessing
 import os
 import random
@@ -18,7 +19,6 @@ import src.utils.utils as SL
 from src import settings
 
 angle_bin = settings.ANGLE_BIN
-
 distance_bin = settings.DISTANCE_BIN
 start = settings.START
 timecut = settings.TIMECUT
@@ -26,6 +26,22 @@ exptime = settings.EXP_DURATION
 n = settings.RANDOM_GROUP_SIZE
 nrand1 = settings.N_RANDOM_1
 nrand2 = settings.N_RANDOM_2
+
+LOGS_DIR = settings.LOGS_DIR
+os.makedirs(LOGS_DIR, exist_ok=True)
+log_file_path = os.path.join(LOGS_DIR, "runtime_log.txt")
+
+logger = logging.getLogger("runtime_logger")
+logger.setLevel(logging.INFO)
+
+if logger.hasHandlers():logger.handlers.clear()
+
+file_handler = logging.FileHandler(log_file_path)
+file_handler.setLevel(logging.INFO)
+
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+file_handler.setFormatter(formatter)
+logger.addHandler(file_handler)
 
 angle, distance, time_arr = np.zeros((500, 1)), np.zeros((500, 1)), np.zeros((500, 1))
 
@@ -36,11 +52,20 @@ treatment = fileio.load_multiple_folders(settings.TRACKINGS)
 sorted_keys = natsort.natsorted(treatment.keys())
 treatment = {k: treatment[k] for k in sorted_keys}
 
-df = pd.DataFrame(columns=["distance", "angle", "time"])
-ni = 0
+CRITERIA_SAVE_PATH = os.path.join(settings.OUTPUT_DIR, f'{settings.TREATMENT}_criteria.csv')
 
-while len(df) < 500:
-    # print(ni)
+treatment_name = settings.TREATMENT
+if os.path.exists(CRITERIA_SAVE_PATH):
+    criteria_df = pd.read_csv(CRITERIA_SAVE_PATH, index_col=0)
+    ni = len(criteria_df)
+    logger.info(f'{treatment_name} - Continue from: {ni}')
+
+else:
+    criteria_df = pd.DataFrame(columns=["distance", "angle", "time"])
+    ni = 0
+    logger.info(f'{treatment_name} - Start from 0')
+
+while len(criteria_df) < 500:
     total_time = time.time()
     temp_ind = random.sample(range(len(treatment)), settings.RANDOM_GROUP_SIZE)
     pick_random_groups = {list(treatment.keys())[i]: list(treatment.values())[i] for i in temp_ind}
@@ -224,19 +249,18 @@ while len(df) < 500:
             if len(ftemp) > 0 and ftemp[0] != 0:
                 time_arr[ni] = M[ftemp[0]]
 
-                print(f"{ni} distance {distance[ni]} angle {angle[ni]} time {time_arr[ni]}")
-
+                # print(f"{ni} distance {distance[ni]} angle {angle[ni]} time {time_arr[ni]}")
                 d_df = pd.DataFrame([{"distance": distance[ni][0], "angle": angle[ni][0], "time": time_arr[ni][0]}])
-                df = pd.concat([df, d_df], ignore_index=True)
-                df.to_csv(f"data/{settings.TREATMENT}_criteria.csv")
+                criteria_df = pd.concat([criteria_df, d_df], ignore_index=True)
+                criteria_df.to_csv(CRITERIA_SAVE_PATH)
 
-                times_path = "/srv/milky/drosophila-datasets/CSf_times"
+                times_path = f"/srv/milky/drosophila-datasets/{settings.TREATMENT}"
+                os.makedirs(times_path, exist_ok=True)
                 np.save(os.path.join(times_path, f"{ni}_real_array.npy"),  np.concatenate(tstrain))
                 np.save(os.path.join(times_path, f"{ni}_pseudo_array.npy"), np.concatenate(ptstrain))
-
-                with open("data/output.txt", "a") as file: file.write(f"{ni}: {time.time() - total_time} \n")
-                file.close()
-
+                
+                logger.info(f"{treatment_name} - {ni}: {time.time() - total_time}")
+                # sys.exit()
                 ni += 1
  
         except Exception as e:
