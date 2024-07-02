@@ -33,12 +33,18 @@ for group_name, group_path in treatment.items():
     for fly_name, fly_path in all_flies_paths.items():
         df = pd.read_csv(fly_path)
         df.rename(
-            columns={"pos x": "pos x", "pos y": "pos y", "ori": "ori", "major axis len": "a", "minor axis len": "b"},
-            inplace=True,
-        )
+            columns={
+                "pos x": "pos x",
+                "pos y": "pos y",
+                "ori": "ori",
+                "major axis len": "a",
+                "minor axis len": "b"
+                },inplace=True)
         df = df[["pos x", "pos y", "ori", "a", "b"]]
+
         df = df.iloc[START:END_FRAME, :]
         df = df.fillna(method="ffill")
+
         df["a"] = df["a"] / 4
         df["pos x"] = df["pos x"].subtract(group_nonormalization.get("min_x"))
         df["pos y"] = df["pos y"].subtract(group_nonormalization.get("min_y"))
@@ -46,6 +52,8 @@ for group_name, group_path in treatment.items():
         df["pos y"] = df["pos y"] / group_nonormalization.get("y_px_ratio")
         mean_ratio = (group_nonormalization.get("x_px_ratio") + group_nonormalization.get("y_px_ratio")) / 2
         df["a"] = df["a"] / mean_ratio
+
+        df.reset_index(inplace=True)
 
         save_path = os.path.join(SAVE_PATH, group_name, fly_name.replace('.csv', '.npy')) 
         np.save(save_path, df.to_numpy())
