@@ -3,7 +3,7 @@ import os
 RAW_DATA = r"/srv/milky/drosophila-datasets/drosophila-isolation/data/trackings"
 RAW_NORMALIZATION = r'/srv/milky/drosophila-datasets/drosophila-isolation/data/normalization'
 
-TREATMENT = "CSf"
+TREATMENT = "CS_10D"
 
 DATA_PREPARED = False
 
@@ -31,3 +31,5 @@ INPUT_DIR = os.path.join(ROOT_DIR, "data", "input", TREATMENT)
 TRACKINGS = os.path.join(INPUT_DIR, "trackings")
 PXPERMM = os.path.join(INPUT_DIR, "pxpermm", f"{TREATMENT}.json")
 NROMALIZATION = os.path.join(INPUT_DIR, "normalization.json")
+
+OUTPUT_DIR = os.path.join(ROOT_DIR, "data", "output")
