@@ -1,14 +1,19 @@
-import os
+from pathlib import Path
 
 RAW_DATA = r"/srv/milky/drosophila-datasets/drosophila-isolation/data/trackings"
 RAW_NORMALIZATION = r'/srv/milky/drosophila-datasets/drosophila-isolation/data/normalization'
 
-TREATMENT = "CS_10D"
+ROOT_DIR = Path(__file__).resolve().parent.parent
+LOGS_DIR = ROOT_DIR / "logs"
+INPUT_DIR = ROOT_DIR / "data"
+OUTPUT_DIR = ROOT_DIR / "data" / "output"
 
+TREATMENT = "CsCh"
 DATA_PREPARED = False
+MOVECUT = True
 
-ARENA_DIEAMETER_MM = 61
-FPS = 24 
+ARENA_DIAMETER_MM = 61
+FPS = 24
 START = 0
 END = 20
 EXP_DURATION = 20
@@ -21,15 +26,7 @@ DISTANCE_MAX = 100
 RANDOM_GROUP_SIZE = 15
 N_RANDOM_1 = 500
 N_RANDOM_2 = 500
-MOVECUT = True
-# Paths
-ROOT_DIR = os.path.dirname(os.path.dirname(__file__))
-LOGS_DIR = os.path.join(ROOT_DIR, "logs")
-# Input files
-INPUT_DIR = os.path.join(ROOT_DIR, "data", "input", TREATMENT)
-#TRACKINGS = os.path.join(INPUT_DIR, "trackings", TREATMENT)
-TRACKINGS = os.path.join(INPUT_DIR, "trackings")
-PXPERMM = os.path.join(INPUT_DIR, "pxpermm", f"{TREATMENT}.json")
-NROMALIZATION = os.path.join(INPUT_DIR, "normalization.json")
 
-OUTPUT_DIR = os.path.join(ROOT_DIR, "data", "output")
+TRACKINGS = INPUT_DIR / "trackings" / TREATMENT
+PXPERMM = INPUT_DIR / "pxpermm" / f"{TREATMENT}.json"
+NORMALIZATION = INPUT_DIR / "normalization.json"
