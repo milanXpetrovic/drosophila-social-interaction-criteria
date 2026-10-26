@@ -1,20 +1,31 @@
-# %%
+#%%
 
+# fmt: off
 import json
 import logging
 import multiprocessing
 import os
 import random
+import sys
 import time
-
 import natsort
 import numpy as np
 import pandas as pd
-import src.utils.fileio as fileio
-import src.utils.utils as SL
 from scipy.signal import convolve2d
 from skimage import measure as skimage_label
-from src import settings
+
+# flake8: noqa: E402
+current_path = os.path.abspath(os.path.dirname(__file__))
+# flake8: noqa: E402
+sys.path.append(os.path.join(os.path.abspath(os.path.join(current_path, '..', '..')), 'src'))
+import src.utils.utils as SL
+
+import utils.fileio as fileio
+
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+sys.path.append(project_root)
+
+from settings import interaction_criteria as settings
 
 ANGLE_BIN = settings.ANGLE_BIN
 DISTANCE_BIN = settings.DISTANCE_BIN
@@ -400,95 +411,97 @@ def determine_characteristic_interaction_time(summed_real_hist, summed_pseudo_hi
     return characteristic_time
 
 
-def main():
-    logger = setup_logger(settings.LOGS_DIR)
+# def main():
+logger = setup_logger(settings.LOGS_DIR)
+treatment_data = load_app_data(settings.TRACKINGS, settings.NROMALIZATION, settings.PXPERMM)
+criteria_output_path = os.path.join(settings.OUTPUT_DIR, f'{settings.TREATMENT}_criteria.csv')
+criteria_df, iteration_count = initialize_or_load_criteria_df(criteria_output_path, settings.TREATMENT, logger)
 
-    treatment_data = load_app_data(settings.TRACKINGS, settings.NROMALIZATION, settings.PXPERMM)
-    criteria_output_path = os.path.join(settings.OUTPUT_DIR, f'{settings.TREATMENT}_criteria.csv')
-    criteria_df, iteration_count = initialize_or_load_criteria_df(criteria_output_path, settings.TREATMENT, logger)
+coord_bins = get_coordinate_bins()
 
-    coord_bins = get_coordinate_bins()
+while len(criteria_df) < MAX_ITERATIONS:
+    loop_iter_start_time = time.time()
+    current_iter_label = f"Iter {iteration_count} (Target: {len(criteria_df)})"
+    try:
+        if len(treatment_data) < RANDOM_GROUP_SIZE:
+            logger.error(
+                f"Not enough treatment groups ({len(treatment_data)}) to sample {RANDOM_GROUP_SIZE}. Stopping.")
+            break
 
-    while len(criteria_df) < MAX_ITERATIONS:
-        loop_iter_start_time = time.time()
-        current_iter_label = f"Iter {iteration_count} (Target: {len(criteria_df)})"
-        try:
-            if len(treatment_data) < RANDOM_GROUP_SIZE:
-                logger.error(
-                    f"Not enough treatment groups ({len(treatment_data)}) to sample {RANDOM_GROUP_SIZE}. Stopping.")
-                break
+        random_group_indices = random.sample(range(len(treatment_data)), RANDOM_GROUP_SIZE)
+        super_N_hist, pseudo_N_hist_sample = calculate_base_spatial_metrics(treatment_data, random_group_indices)
+        initial_density_map = calculate_initial_social_density_map(super_N_hist, pseudo_N_hist_sample)
 
-            random_group_indices = random.sample(range(len(treatment_data)), RANDOM_GROUP_SIZE)
-            super_N_hist, pseudo_N_hist_sample = calculate_base_spatial_metrics(treatment_data, random_group_indices)
-            initial_density_map = calculate_initial_social_density_map(super_N_hist, pseudo_N_hist_sample)
-
-            processed_map = process_spatial_density_map(initial_density_map, coord_bins)
-            if processed_map is None:
-                logger.warning(
-                    f"{settings.TREATMENT} - {current_iter_label}: Spatial map processing yielded no significant regions.")
-                iteration_count += 1
-                continue
-
-            est_angle, est_distance = determine_max_angle_distance_from_map(processed_map, coord_bins)
-            if est_angle is None or est_distance is None:
-                logger.warning(
-                    f"{settings.TREATMENT} - {current_iter_label}: Could not estimate initial angle/distance from processed map.")
-                iteration_count += 1
-                continue
-
-            refinement_density_map = (super_N_hist / RANDOM_GROUP_SIZE) - (pseudo_N_hist_sample / N_RANDOM_2)
-
-            final_angle, final_distance = refine_angle_distance_iteratively(
-                refinement_density_map, coord_bins, est_angle, est_distance)
-
-            if final_angle is None or final_distance is None or final_angle == 0 or final_distance == 0:
-                logger.warning(
-                    f"{settings.TREATMENT} - {current_iter_label}: Angle/Distance refinement resulted in zero/invalid values.")
-                iteration_count += 1
-                continue
-
-            try:
-                real_hist, pseudo_hist, time_b, combined_real_t, combined_pseudo_t = \
-                    calculate_interaction_time_distributions(
-                        treatment_data, random_group_indices, final_angle, final_distance)
-
-                char_time = determine_characteristic_interaction_time(real_hist, pseudo_hist, time_b)
-
-                if char_time is not None and char_time > 0:
-                    new_row = pd.DataFrame([{"distance": final_distance, "angle": final_angle, "time": char_time}])
-                    criteria_df = pd.concat([criteria_df, new_row], ignore_index=True)
-                    criteria_df.to_csv(criteria_output_path)
-
-                    times_data_base_path = f"/srv/milky/drosophila-datasets/{settings.TREATMENT}"
-                    os.makedirs(times_data_base_path, exist_ok=True)
-                    np.save(os.path.join(times_data_base_path, f"{iteration_count}_real_array.npy"), combined_real_t)
-                    np.save(os.path.join(times_data_base_path,
-                            f"{iteration_count}_pseudo_array.npy"), combined_pseudo_t)
-
-                    duration = time.time() - loop_iter_start_time
-                    logger.info(
-                        f"{settings.TREATMENT} - {current_iter_label}: D={final_distance:.2f}, A={final_angle:.2f}, T={char_time:.2f}. Took {duration:.2f}s")
-                else:
-                    duration = time.time() - loop_iter_start_time
-                    logger.warning(
-                        f"{settings.TREATMENT} - {current_iter_label}: Failed to determine characteristic time. Took {duration:.2f}s")
-
-            except Exception as e_time:
-                duration = time.time() - loop_iter_start_time
-                logger.error(
-                    f"{settings.TREATMENT} - {current_iter_label}: Error in time analysis: {e_time}. Took {duration:.2f}s")
-
+        processed_map = process_spatial_density_map(initial_density_map, coord_bins)
+        if processed_map is None:
+            logger.warning(
+                f"{settings.TREATMENT} - {current_iter_label}: Spatial map processing yielded no significant regions.")
             iteration_count += 1
+            continue
 
-        except Exception as e_outer:
+        est_angle, est_distance = determine_max_angle_distance_from_map(processed_map, coord_bins)
+        if est_angle is None or est_distance is None:
+            logger.warning(
+                f"{settings.TREATMENT} - {current_iter_label}: Could not estimate initial angle/distance from processed map.")
+            iteration_count += 1
+            continue
+
+        refinement_density_map = (super_N_hist / RANDOM_GROUP_SIZE) - (pseudo_N_hist_sample / N_RANDOM_2)
+
+        final_angle, final_distance = refine_angle_distance_iteratively(
+            refinement_density_map, coord_bins, est_angle, est_distance)
+
+        if final_angle is None or final_distance is None or final_angle == 0 or final_distance == 0:
+            logger.warning(
+                f"{settings.TREATMENT} - {current_iter_label}: Angle/Distance refinement resulted in zero/invalid values.")
+            iteration_count += 1
+            continue
+
+        try:
+            real_hist, pseudo_hist, time_b, combined_real_t, combined_pseudo_t = \
+                calculate_interaction_time_distributions(
+                    treatment_data, random_group_indices, final_angle, final_distance)
+
+            char_time = determine_characteristic_interaction_time(real_hist, pseudo_hist, time_b)
+
+            if char_time is not None and char_time > 0:
+                new_row = pd.DataFrame([{"distance": final_distance, "angle": final_angle, "time": char_time}])
+                criteria_df = pd.concat([criteria_df, new_row], ignore_index=True)
+                criteria_df.to_csv(criteria_output_path)
+
+                times_data_base_path = f"/srv/milky/drosophila-datasets/{settings.TREATMENT}"
+                os.makedirs(times_data_base_path, exist_ok=True)
+                np.save(os.path.join(times_data_base_path, f"{iteration_count}_real_array.npy"), combined_real_t)
+                np.save(os.path.join(times_data_base_path,
+                        f"{iteration_count}_pseudo_array.npy"), combined_pseudo_t)
+
+                duration = time.time() - loop_iter_start_time
+                logger.info(
+                    f"{settings.TREATMENT} - {current_iter_label}: D={final_distance:.2f}, A={final_angle:.2f}, T={char_time:.2f}. Took {duration:.2f}s")
+            else:
+                duration = time.time() - loop_iter_start_time
+                logger.warning(
+                    f"{settings.TREATMENT} - {current_iter_label}: Failed to determine characteristic time. Took {duration:.2f}s")
+
+        except Exception as e_time:
             duration = time.time() - loop_iter_start_time
             logger.error(
-                f"{settings.TREATMENT} - {current_iter_label}: Critical error in iteration: {e_outer}. Took {duration:.2f}s")
-            iteration_count += 1
+                f"{settings.TREATMENT} - {current_iter_label}: Error in time analysis: {e_time}. Took {duration:.2f}s")
 
-    logger.info(
-        f"Processing finished. Total criteria rows generated: {len(criteria_df)} after {iteration_count} attempts.")
+        iteration_count += 1
+
+    except Exception as e_outer:
+        duration = time.time() - loop_iter_start_time
+        logger.error(
+            f"{settings.TREATMENT} - {current_iter_label}: Critical error in iteration: {e_outer}. Took {duration:.2f}s", exc_info=True)
+        iteration_count += 1
+
+        raise 
+
+logger.info(
+    f"Processing finished. Total criteria rows generated: {len(criteria_df)} after {iteration_count} attempts.")
 
 
-if __name__ == '__main__':
-    main()
+# if __name__ == '__main__':
+#     # sys.exit()
+#     main()

@@ -20,3 +20,10 @@ If you find this code useful, you can cite this work:
   publisher={The Royal Society}
 }
 ```
+
+## Take care
+
+- Before starting, you need to do:
+  - get normalization
+  - preproc trajectories, this is must if you dont have .npy
+- watch out for .npy format

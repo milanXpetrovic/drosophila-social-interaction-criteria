@@ -5,7 +5,6 @@ import re
 import numpy as np
 import pandas as pd
 import scipy.io
-
 import src.utils.fileio as fileio
 
 path = "/home/milky/sna/data/trackings/CsCh"
@@ -32,7 +31,14 @@ for group_name, group_path in all_groups.items():
         pxpermm = np.array([[np.float64(PXPERMM_GROUP)]])
         fps = np.array([[np.float64(FPS)]])
         structured_array = np.array([(x, y, theta, a, b, id, pxpermm, fps)],
-                                    dtype=[('x', object), ('y', object), ('theta', object), ('a', object), ('b', object), ('id', object), ('pxpermm', object), ('fps', object)])
+                                    dtype=[('x', object),
+                                           ('y', object),
+                                           ('theta', object),
+                                           ('a', object),
+                                           ('b', object),
+                                           ('id', object),
+                                           ('pxpermm', object),
+                                           ('fps', object)])
 
         structured_arrays.append(structured_array)
 

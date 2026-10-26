@@ -1,18 +1,22 @@
+# %%
 import itertools
 import json
 import multiprocessing
 import os
 import random
+import sys
 
 import natsort
 import numpy as np
 import pandas as pd
 import src.utils.fileio as fileio  # Assuming this exists and is correct
-from scipy.signal import \
-    find_peaks  # Retained, though not used by main.py functions directly
-from src import settings  # Assuming this provides necessary constants
 
-# --- Cached Global Data ---
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
+sys.path.append(project_root)
+
+from settings import interaction_criteria as settings
+from settings import main_settings
+
 _NORMALIZATION_DATA_CACHE = None
 _PXPERMM_DATA_CACHE = None
 
@@ -26,11 +30,6 @@ def _load_global_json_data():
     if _PXPERMM_DATA_CACHE is None:
         with open(settings.PXPERMM, 'r') as f:
             _PXPERMM_DATA_CACHE = json.load(f)
-
-# Ensure data is loaded when module is imported or first used by a process
-# _load_global_json_data() # Call it here, or ensure first function needing it calls it.
-
-# --- Core Utility Functions ---
 
 
 def angledifference_nd(angle1_deg, angle2_deg):
@@ -75,7 +74,9 @@ def _load_and_normalize_fly_data_from_path(fly_path, norm_params, pxpermm_val_fo
 
 
 def normalize_group(group_data_paths, is_pseudo):
+    # TODO: fix this, _load_global_json_data() is called multiple times
     _load_global_json_data()  # Ensure JSONs are loaded
+
     normalization_all_groups = _NORMALIZATION_DATA_CACHE
     pxpermm_all_groups = _PXPERMM_DATA_CACHE
 
@@ -83,7 +84,7 @@ def normalize_group(group_data_paths, is_pseudo):
     pxpermm_map = {}
 
     if is_pseudo:
-        num_groups_to_sample = 12
+        num_groups_to_sample = main_settings.FLIES_IN_GROUP
         available_group_keys = list(group_data_paths.keys())
         num_to_sample = min(num_groups_to_sample, len(available_group_keys))
 
@@ -94,7 +95,7 @@ def normalize_group(group_data_paths, is_pseudo):
             norm_params = normalization_all_groups[group_key_orig]
             pxpermm_val_for_group = pxpermm_all_groups[group_key_orig]
 
-            num_flies_in_group = 12  # Consider making this dynamic if possible
+            num_flies_in_group = main_settings.FLIES_IN_GROUP  # Consider making this dynamic if possible
             fly_to_sample_idx = random.randint(1, num_flies_in_group)
             fly_file_name = f"fly{fly_to_sample_idx}.npy"
             fly_path = os.path.join(group_folder_path, fly_file_name)
@@ -227,8 +228,8 @@ def boot_pseudo_fly_space(treatment_data, random_group_indices_for_treatment):
     subset_treatment_data = {
         keys[i]: values[i] for i in random_group_indices_for_treatment
     }
-
-    num_pseudo_iterations = 15  # As per original's second version
+    # TODO: mskr this setting
+    num_pseudo_iterations = 100
     pool_args = [(subset_treatment_data, i) for i in range(num_pseudo_iterations)]
 
     with multiprocessing.Pool() as pool:

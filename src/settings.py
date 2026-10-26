@@ -1,18 +1,35 @@
 from pathlib import Path
 
-RAW_DATA = r"/srv/milky/drosophila-datasets/drosophila-isolation/data/trackings"
-RAW_NORMALIZATION = r'/srv/milky/drosophila-datasets/drosophila-isolation/data/normalization'
+from settings import main_settings
 
-ROOT_DIR = Path(__file__).resolve().parent.parent
-LOGS_DIR = ROOT_DIR / "logs"
-INPUT_DIR = ROOT_DIR / "data"
-OUTPUT_DIR = ROOT_DIR / "data" / "output"
+# RAW_DATA = r"/srv/milky/drosophila-datasets/drosophila-isolation/data/trackings"
+# RAW_NORMALIZATION = r'/srv/milky/drosophila-datasets/drosophila-isolation/data/normalization'
 
-TREATMENT = "CsCh"
+TREATMENT = "CS_old3-5d_24group"
+
+ROOT_DIR = main_settings.SAVE_DATA_LOCATION
+# ROOT_DIR = Path('/srv/milky/drosophila-pipeline')
+
+
+
+INPUT_DIR = ROOT_DIR / "preproc-trajectories/normalize_trajectories" / TREATMENT
+
+
+INTERACTION_CRITERIA = ROOT_DIR / '4_drosophila_social_interaction_criteria'
+
+# TODO: fix logs location to be with script
+LOGS_DIR = INTERACTION_CRITERIA / "logs"
+OUTPUT_DIR = INTERACTION_CRITERIA / "data"  # / "output"
+TRACKINGS = INTERACTION_CRITERIA / "trackings" / TREATMENT
+PXPERMM = INTERACTION_CRITERIA / "pxpermm" / f"{TREATMENT}.json"
+
+NROMALIZATION = INTERACTION_CRITERIA / "data" / TREATMENT / "normalization.json"
+
+
 DATA_PREPARED = False
 MOVECUT = True
 
-ARENA_DIAMETER_MM = 61
+ARENA_DIAMETER_MM = 81
 FPS = 24
 START = 0
 END = 20
@@ -23,10 +40,6 @@ ANGLE_BIN = 5
 DISTANCE_BIN = 0.25
 DISTANCE_MAX = 100
 
-RANDOM_GROUP_SIZE = 15
+RANDOM_GROUP_SIZE = 24
 N_RANDOM_1 = 500
 N_RANDOM_2 = 500
-
-TRACKINGS = INPUT_DIR / "trackings" / TREATMENT
-PXPERMM = INPUT_DIR / "pxpermm" / f"{TREATMENT}.json"
-NORMALIZATION = INPUT_DIR / "normalization.json"

@@ -1,6 +1,5 @@
-## This script assumes that youre already preprocessed data and have normalziation file
-
-#%%
+# This script assumes that youre already preprocessed data and have normalziation file
+# %%
 import json
 import math
 import os
@@ -8,22 +7,23 @@ import sys
 
 import pandas as pd
 
+import utils.fileio as fileio
+
+from settings import interaction_criteria as settings
+from settings import main_settings
+
 current_path = os.path.abspath(os.path.dirname(__file__))
-sys.path.append(os.path.join( os.path.abspath(os.path.join(current_path, '..', '..')), 'src'))
+sys.path.append(os.path.join(os.path.abspath(os.path.join(current_path, '..', '..')), 'src'))
 
-import fileio
-
-import settings
 
 TREATMENT = settings.TREATMENT
-ARENA_DIAMETER = settings.ARENA_DIEAMETER_MM
+ARENA_DIAMETER = settings.ARENA_DIAMETER_MM
 
-TRACKINGS = os.path.join(settings.RAW_DATA, TREATMENT)
-treatment = fileio.load_multiple_folders(TRACKINGS)
+treatment = fileio.load_multiple_folders(settings.INPUT_DIR)
 
-SAVE_PATH = os.path.join(settings.INPUT_DIR, TREATMENT, "normalization.json")
+SAVE_PATH = os.path.join(settings.OUTPUT_DIR, "normalization.json")
 
-SCRIPT_OUTPUT = os.path.join(settings.INPUT_DIR, TREATMENT)
+SCRIPT_OUTPUT = os.path.join(settings.OUTPUT_DIR, TREATMENT)
 os.makedirs(SCRIPT_OUTPUT, exist_ok=True)
 
 pxpermm_dict = {}
@@ -68,8 +68,8 @@ PXPERMM_SAVE_PATH = os.path.join(SCRIPT_OUTPUT, "pxpermm")
 os.makedirs(PXPERMM_SAVE_PATH, exist_ok=True)
 
 with open(os.path.join(PXPERMM_SAVE_PATH, f"{TREATMENT}.json"), 'w') as f:
-    json.dump(pxpermm_dict, f, indent=4) 
+    json.dump(pxpermm_dict, f, indent=4)
 
 NORMALIZATION_SAVE_PATH = os.path.join(SCRIPT_OUTPUT, "normalization.json")
 with open(NORMALIZATION_SAVE_PATH, 'w') as f:
-    json.dump(norm, f, indent=4) 
+    json.dump(norm, f, indent=4)
